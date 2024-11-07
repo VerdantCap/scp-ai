@@ -1,193 +1,234 @@
-def markdown_to_slack_blocks(markdown_text):
-    """
-    Convert markdown text to Slack block format.
-    Handles basic markdown elements, dividers, and respects Slack's 3000 character limit per block.
+import re
+
+def inline_markdown_to_rich_text(line: str):
+    # Define inline formatting patterns with capturing groups
+    patterns = [
+        (r'\*\*\*(.+?)\*\*\*', {"bold": True, "italic": True}), # Bold & Italic
+        (r'\_\_\_(.+?)\_\_\_', {"bold": True, "italic": True}), # Bold & Italic
+        (r'\_\_\*(.+?)\*\_\_', {"bold": True, "italic": True}), # Bold & Italic
+        (r'\*\*\_(.+?)\_\*\*', {"bold": True, "italic": True}), # Bold & Italic
+        (r'\*\*(.+?)\*\*', {"bold": True}),                     # Bold
+        (r'\_\_(.+?)\_\_', {"bold": True}),                     # Bold
+        (r'\*(.+?)\*', {"italic": True}),                       # Italic
+        (r'\_(.+?)\_', {"italic": True}),                       # Italic
+        (r'\`(.+?)\`', {"code": True}),                         # Inline code
+        (r'\~(.+?)\~', {"strike": True}),                       # Strikethrough
+        (r'\!?\[(.+?)\]\((.+?)\)', {"link": True})                 # Links
+    ]
     
-    Args:
-        markdown_text (str): Input markdown text
+    # Combine all patterns into one unified regex to capture all inline formats
+    combined_pattern = '|'.join([f"(?:{pattern})" for pattern, _ in patterns])
+
+    # This pattern will also capture the non-formatted text
+    token_pattern = re.compile(rf"({combined_pattern}|[^\*\_\`~\[\]]+)")
+
+    # Match all tokens (either formatted text or plain text)
+    tokens = token_pattern.findall(line)
+    
+    elements = []
+    for token in tokens:
+        matched = False
+        # Check each token for a match with the inline formatting patterns
+        for idx, (pattern, style) in enumerate(patterns):
+            matched_text = token[idx + 1]  # Capture group for the matched text
+            if matched_text:
+                matched = True
+                if style == {"link": True}:  # Handle links specially
+                    link_text = token[idx + 1]
+                    link_url = token[idx + 2]
+                    elements.append({
+                        "type": "link",
+                        "text": link_text,
+                        "url": link_url
+                    })
+                else:
+                    # For other inline formats (bold, italic, etc.)
+                    elements.append({
+                        "type": "text",
+                        "text": matched_text,
+                        "style": style
+                    })
+                break
         
+        if not matched:
+            # If it's not a match (plain text), add it as normal text
+            elements.append({
+                "type": "text",
+                "text": token[0]  # Token is plain text (no format)
+            })
+
+    return elements
+
+def markdown_to_slack_rich_text(markdown_text: str):
+    """
+    Convert Markdown text to Slack rich text format.
+    
+    Parameters:
+    markdown_text (str): The Markdown text to be converted.
+    
     Returns:
-        list: Array of Slack block objects
+    list: A list of Slack rich text block objects.
     """
-    import re
+    slack_blocks = []
     
-    SLACK_TEXT_LIMIT = 740
-    blocks = []
-    current_section = []
+    # Split the Markdown text into lines
+    lines = markdown_text.split('\n')
     
-    def chunk_text(text, limit=SLACK_TEXT_LIMIT):
-        """Split text into chunks that respect Slack's character limit."""
-        if len(text) <= limit:
-            return [text]
-            
-        chunks = []
-        current_chunk = ""
-        
-        # Split by sentences to maintain context
-        sentences = re.split(r'([.!?]+\s+)', text)
-        
-        for sentence in sentences:
-            if len(current_chunk) + len(sentence) <= limit:
-                current_chunk += sentence
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                current_chunk = sentence
-                
-        if current_chunk:
-            chunks.append(current_chunk.strip())
-            
-        return chunks
+    # Keep track of code block state
+    in_code_block = False
     
-    def process_inline_formatting(text):
-        # Bold
-        text = re.sub(r'\*\*(.*?)\*\*', r'*\1*', text)
-        text = re.sub(r'__(.*?)__', r'*\1*', text)
-        
-        # Italic
-        text = re.sub(r'\*(.*?)\*', r'_\1_', text)
-        text = re.sub(r'_(.*?)_', r'_\1_', text)
-        
-        # Code
-        text = re.sub(r'`(.*?)`', r'`\1`', text)
-        
-        return text
-    
-    def add_text_block(text, type="plain_text"):
-        """Add text block(s) respecting character limit."""
-        if not text.strip():
-            return
-            
-        # Split text into chunks if it exceeds the limit
-        text_chunks = chunk_text(text.strip())
-        
-        for chunk in text_chunks:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": type,
-                    "text": chunk
-                }
-            })
-    
-    list_in_progress = False
-    code_block = False
-    code_content = []
-    
-    lines = markdown_text.strip().split('\n')
-    
+    # Iterate through the lines and convert to Slack blocks
     for line in lines:
-        # Handle horizontal rules (dividers)
-        if re.match(r'^\s*([*-_])\s*(?:\1\s*){2,}\s*$', line):
-            # Add any pending list items before the divider
-            if list_in_progress and current_section:
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": '\n'.join(current_section),
-                        "verbatim": True  # Prevent "See more" button
-                    }
-                })
-                current_section = []
-                list_in_progress = False
-            
-            blocks.append({"type": "divider"})
-            continue
-            
-        # Handle code blocks
+        # Check for code blocks
         if line.startswith('```'):
-            if code_block:
-                # End code block
-                if code_content:
-                    code_text = ' '.join(code_content)
-                    # Split code blocks if they exceed limit
-                    for chunk in chunk_text(code_text):
-                        blocks.append({
-                            "type": "section",
-                            "text": {
-                                "type": "mrkdwn",
-                                "text": f"```{chunk}```"
-                            }
-                        })
-                code_content = []
-                code_block = False
+            if not in_code_block:
+                # Start of a code block
+                in_code_block = True
+                slack_blocks.append({
+                    "type": "rich_text",
+                    "elements": [
+                        {
+                            "type": "rich_text_preformatted",
+                            "elements": []
+                        }
+                    ]
+                })
             else:
-                code_block = True
-            continue
-            
-        if code_block:
-            code_content.append(line)
-            continue
-            
-        # Headers
-        if line.startswith('#'):
-            header_level = len(re.match(r'^#+', line).group())
-            header_text = line[header_level:].strip()
-            # Headers don't need chunking as they're typically short
-            blocks.append({
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": header_text[:3000]  # Safeguard for header length
-                }
+                # End of a code block
+                in_code_block = False
+        # If in a code block, add the line as-is
+        elif in_code_block:
+            slack_blocks[-1]["elements"][0]["elements"].append({
+                "type": "text",
+                "text": f"{line}\n",
             })
-            continue
-            
-        # Lists
-        if re.match(r'^\s*[\-\*\+]\s', line) or re.match(r'^\s*\d+\.\s', line):
-            if not list_in_progress:
-                list_in_progress = True
-                current_section = []
-            
-            list_item = re.sub(r'^\s*[\-\*\+]\s', '• ', line)
-            list_item = re.sub(r'^\s*\d+\.\s', '• ', list_item)
-            current_section.append(process_inline_formatting(list_item))
-            
-            # Check if current list exceeds limit
-            if len('\n'.join(current_section)) > SLACK_TEXT_LIMIT:
-                # Add current list except last item
-                blocks.append({
-                    "type": "section",
+        # Check for headers
+        elif line.startswith('#'):
+            level = line.count('#')
+            text = line[level:].strip()
+            if text:
+                slack_blocks.append({
+                    "type": "header",
                     "text": {
-                        "type": "mrkdwn",
-                        "text": '\n'.join(current_section[:-1])
+                        "type": "plain_text",
+                        "text": text,
+                        "emoji": True
                     }
                 })
-                # Start new list with last item
-                current_section = [current_section[-1]]
-            continue
-            
-        # If we were in a list and now we're not, add the list block
-        if list_in_progress and not (re.match(r'^\s*[\-\*\+]\s', line) or re.match(r'^\s*\d+\.\s', line)):
-            if current_section:
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": '\n'.join(current_section)
-                    }
+        # Check for dividers
+        elif line.strip() == '---':
+            slack_blocks.append({
+                "type": "divider"
+            })
+        # Check for unordered lists (start with `-` or `*`)
+        elif line.lstrip().startswith(('- ', '* ')):
+            # Add unordered list item
+            list_item = line.lstrip()[1:].strip()  # Remove leading `-` or `*`
+            elements = inline_markdown_to_rich_text(list_item)
+            if len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text":
+                # Check if there is an existing list, if there is add to it
+                if len(slack_blocks[-1]["elements"]) > 0 and slack_blocks[-1]["elements"][-1].get("type") == "rich_text_list" and slack_blocks[-1]["elements"][-1].get("style") == "bullet":
+                    slack_blocks[-1]["elements"][-1]["elements"].append({
+                        "type": "rich_text_section",
+                        "elements": elements
+                    })
+                else:
+                    slack_blocks[-1]["elements"].append({
+                        "type": "rich_text_list",
+                        "style": "bullet",
+                        "elements": [{
+                            "type": "rich_text_section",
+                            "elements": elements
+                        }]
+                    })
+            else:
+                slack_blocks.append({
+                    "type": "rich_text",
+                    "elements": [{
+                        "type": "rich_text_list",
+                        "style": "bullet",
+                        "elements": [{
+                            "type": "rich_text_section",
+                            "elements": elements
+                        }]
+                    }]
                 })
-            current_section = []
-            list_in_progress = False
-            
-        # Regular paragraph text
-        if line.strip() and not list_in_progress:
-            add_text_block(process_inline_formatting(line), "mrkdwn")
-            
-    # Add any remaining list items
-    if current_section:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": '\n'.join(current_section)
-            }
-        })
-        
-    # Ensure all text blocks have at least 1 character
-    for block in blocks:
-        if block["type"] == "section" and not block["text"]["text"].strip():
-            block["text"]["text"] = " "
-            
-    return blocks
+        # Check for ordered lists (lines starting with a number followed by a dot)
+        elif re.match(r'^\d+\. ', line.lstrip()):
+            # Add ordered list item
+            list_item = line.lstrip().split(' ', 1)[1].strip()
+            elements = inline_markdown_to_rich_text(list_item)
+            if len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text":
+                # Check if there is an existing list, if there is add to it
+                if len(slack_blocks[-1]["elements"]) > 0 and slack_blocks[-1]["elements"][-1].get("type") == "rich_text_list" and slack_blocks[-1]["elements"][-1].get("style") == "ordered":
+                    slack_blocks[-1]["elements"][-1]["elements"].append({
+                        "type": "rich_text_section",
+                        "elements": elements
+                    })
+                else:
+                    slack_blocks[-1]["elements"].append({
+                        "type": "rich_text_list",
+                        "style": "ordered",
+                        "elements": [{
+                            "type": "rich_text_section",
+                            "elements": elements
+                        }]
+                    })
+            else:
+                slack_blocks.append({
+                    "type": "rich_text",
+                    "elements": [{
+                        "type": "rich_text_list",
+                        "style": "ordered",
+                        "elements": [{
+                            "type": "rich_text_section",
+                            "elements": elements
+                        }]
+                    }]
+                })
+        # Check for blockquotes (lines starting with `>`)
+        elif line.lstrip().startswith('> '):
+            # Add blockquote
+            quote_text = line.lstrip()[1:].strip()
+            elements = inline_markdown_to_rich_text(quote_text)
+            # Add a \n to the last element's text
+            if len(elements) > 0:
+                elements[-1]["text"] += "\n"
+            if len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text":
+                # Check if there is an existing block quote, if there is add to it
+                if len(slack_blocks[-1]["elements"]) > 0 and slack_blocks[-1]["elements"][-1].get("type") == "rich_text_quote":
+                    slack_blocks[-1]["elements"][-1]["elements"].extend(elements)
+                else:
+                    slack_blocks[-1]["elements"].append({
+                        "type": "rich_text_quote",
+                        "elements": elements
+                    })
+            else:
+                slack_blocks.append({
+                    "type": "rich_text",
+                    "elements": [{
+                        "type": "rich_text_quote",
+                        "elements": elements
+                    }]
+                })
+        # All other lines are treated as rich text
+        else:
+            # Check if the last block is rich text, if not create a new one
+            previous_block_is_rich_text = len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text"
+
+            if not previous_block_is_rich_text:
+                slack_blocks.append({
+                    "type": "rich_text",
+                    "elements": []
+                })
+
+            elements = inline_markdown_to_rich_text(line)
+
+            # Add the constructed elements to the Slack block
+            if elements:
+                slack_blocks[-1]["elements"].append({
+                    "type": "rich_text_section",
+                    "elements": elements,
+                })
+    
+    return slack_blocks

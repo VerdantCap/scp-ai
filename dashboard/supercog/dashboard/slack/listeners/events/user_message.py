@@ -5,9 +5,8 @@ from logging import Logger
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_bolt.async_app import AsyncBoltContext
 
-from .llm_caller import markdown_to_slack
 from .thread_context_store import has_bot_posted_in_thread
-from .slack_ui import markdown_to_slack_blocks
+from .slack_ui import markdown_to_slack_rich_text
 
 import reflex as rx
 
@@ -171,7 +170,7 @@ async def update_response(
         is_final: bool = False,
     ) -> str:
     # First add any files to slack
-    markdown_content = await upload_files_to_slack(
+    content = await upload_files_to_slack(
         client=client,
         logger=logger,
         uploaded_files=uploaded_files,
@@ -180,30 +179,17 @@ async def update_response(
         thread_ts=thread_ts
     )
 
-    markdown_content = markdown_to_slack(content)
+    blocks = markdown_to_slack_rich_text(content or "Supercog was unable to respond")
 
-
-    if not markdown_content:
-        markdown_content = "Supercog was unable to respond"
-
-    blocks = markdown_to_slack_blocks(markdown_content)
-    # blocks = [
-    #     {
-	# 		"type": "section",
-	# 		"text": {
-	# 			"type": "mrkdwn",
-	# 			"text": markdown_content,
-	# 		},
-	# 	},
-    # ]
-    if is_final:
-        blocks[0] |= msg_accessory
+    # Comment out for now, does nothing
+    # if is_final:
+    #     blocks[0] |= msg_accessory
 
     if message_ts:
-        await client.chat_update(              
+        await client.chat_update(
             channel=channel_id,
             ts=message_ts,
-            text=markdown_content,
+            text=content,
             blocks=blocks,
             replace_original=True,
         )
@@ -212,7 +198,7 @@ async def update_response(
         result = await client.chat_postMessage(
             channel=channel_id,
             thread_ts=thread_ts,
-            text=markdown_content,
+            text=content,
             blocks=blocks,
         )
         return result.get("ts")

@@ -118,7 +118,7 @@ class SlackState(GlobalState):
                     slack_team_name = slack_team_response.get("team", {}).get("name") or supercog_user.username
                     tenant = Tenant(
                         domain=supercog_user.email_domain,
-                        name=f"{slack_team_name} Slack Bot"
+                        name=f"{slack_team_name} Slack Org"
                     )
                     session.add(tenant)
                     session.commit()
@@ -126,7 +126,7 @@ class SlackState(GlobalState):
 
                 # We should now have a supercog user, tenant, and slack installation. Connect them
                 if tenant is not None:
-                    supercog_user.slack_installation_id = slack_installation.id
+                    supercog_user.slack_user_id = slack_installation.user_id
                     supercog_user.tenant_id = tenant.id
                     tenant.slack_team_id = slack_installation.team_id
                     tenant_member = tenant.lookup_membership(supercog_user.id)

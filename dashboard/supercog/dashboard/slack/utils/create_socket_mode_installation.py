@@ -32,7 +32,7 @@ def create_slack_installation(email: str, slack_user_id: str, db_url: str):
     # SQL to update user
     update_user_sql = """
     UPDATE users 
-    SET slack_installation_id = :installation_id
+    SET slack_user_id = :slack_user_id
     WHERE email = :email
     """
     
@@ -52,7 +52,7 @@ def create_slack_installation(email: str, slack_user_id: str, db_url: str):
         result = conn.execute(
             text(update_user_sql),
             {
-                "installation_id": installation_id,
+                "slack_user_id": slack_user_id,
                 "email": email
             }
         )

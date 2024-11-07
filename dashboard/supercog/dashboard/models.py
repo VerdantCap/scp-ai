@@ -165,7 +165,7 @@ class User(rx.Model, table=True):
     gtoken_sub: str = ""
     gtoken_email: str = ""
     gtoken_info_json: str = ""
-    slack_installation_id: Optional[str] = Field(default=None, foreign_key="slack_installations.id")
+    slack_user_id: str|None = Field(unique=True, nullable=True, index=True)
 
     # Local auth fields
     email: str|None = Field(unique=True, nullable=True, index=True)

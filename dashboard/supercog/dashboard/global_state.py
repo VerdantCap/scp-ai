@@ -147,7 +147,7 @@ class GlobalState(rx.State):
     def has_installed_slack(self) -> bool:
         if not self.is_authenticated:
             return False
-        return bool(self.user.slack_installation_id)
+        return bool(self.user.slack_user_id)
     
     def open_slack_modal(self, successful: bool):
         if successful:
