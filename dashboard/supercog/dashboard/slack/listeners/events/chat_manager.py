@@ -268,7 +268,7 @@ class ChatManager:
             
         # Get the user associated with this installation
         return session.exec(
-            select(User).where(User.slack_installation_id == earliest_installation.id)
+            select(User).where(User.slack_user_id == earliest_installation.user_id)
         ).first()
     
     async def find_or_create_agent(
@@ -510,10 +510,12 @@ class ChatManager:
                 original_message = original_message_result.get("messages", [])
                 if len(original_message) != 1:
                     logger.error(f"Could not find slack message with ts {message_id}")
+                    return
 
                 original_user_id = original_message[0].get("user")
                 if not original_user_id:
                     logger.error(f"Could not find slack user for message with ts {message_id}")
+                    return
 
                 slack_installation = session.exec(
                     select(SlackInstallation).where(and_(SlackInstallation.user_id == original_user_id, SlackInstallation.team_id == slack_team_id))
@@ -526,7 +528,7 @@ class ChatManager:
                 else:
                     # Create a new agentsvc with the slack installation's user
                     user = session.exec(
-                        select(User).where(User.slack_installation_id == slack_installation.id)
+                        select(User).where(User.slack_user_id == slack_installation.user_id)
                     ).one_or_none()
 
                     # Find the tenant associated with this slack team
@@ -534,11 +536,15 @@ class ChatManager:
                         select(Tenant).where(Tenant.slack_team_id == slack_installation.team_id)
                     ).one_or_none()
 
+                    if user is None or tenant is None:
+                        logger.error(f"Could not find slack user or tenant for slack user {slack_installation.user_id} and slack team {slack_installation.team_id}")
+                        return
+
                     agentsvc = EngineClient()
                     slack_email, name, timezone = await self.get_slack_user_info(slack_user_id)
 
                     agentsvc.user_login(
-                        user.tenant_id,
+                        tenant.id,
                         user.id,
                         name = name,
                         user_email=slack_email or user.emailval,

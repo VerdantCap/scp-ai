@@ -25,7 +25,7 @@ def slack_header_button() -> rx.Component:
         ),
     )
 
-def slack_install_button(primary_button: bool = False, button_text: str = "Reinstall in Slack", font_size: Optional[str] = None, **kwargs) -> rx.Component:
+def slack_install_button(primary_button: bool = False, button_text: str = "Add to a new workspace", font_size: Optional[str] = None, **kwargs) -> rx.Component:
   return rx.chakra.button(
         rx.cond(
             primary_button,

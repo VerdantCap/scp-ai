@@ -963,7 +963,7 @@ class EditorState(AgentsCommonState, PromptHelpers):
         self.processing = True
         self.test_prompt = ""
         
-        qa = QA(question=question or "", user_name=self.authenticated_user.name)
+        qa = QA(question=question or "", user_name=self.authenticated_user.name or "No name")
         qa.answers.append(Answer())
         self.chats.append(qa)
         yield

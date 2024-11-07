@@ -1,5 +1,5 @@
 from logging import Logger
-from typing import Dict, Optional, NamedTuple
+from typing import Optional, NamedTuple
 import re
 from urllib.parse import urlparse
 
@@ -7,10 +7,6 @@ import requests
 from slack_sdk.web.async_client import AsyncWebClient
 
 from supercog.shared.services import config
-
-S3_FILES_BUCKET_NAME = config.get_global("S3_FILES_BUCKET_NAME", required=False)
-S3_PUBLIC_BUCKET = config.get_global("S3_PUBLIC_BUCKET", required=False)
-
 
 class ChannelInfo(NamedTuple):
     channel_id: str
@@ -63,9 +59,18 @@ async def upload_files_to_slack(
         channel_id: str,
         thread_ts: str,
     ) -> str:
-    matches: list[tuple[str, str]] = re.findall(fr"<(https?:\/\/(?:{S3_FILES_BUCKET_NAME}|{S3_PUBLIC_BUCKET})[^|]+)\|([^>]+)>", markdown_content) or []
+    S3_FILES_BUCKET_NAME = config.get_global("S3_FILES_BUCKET_NAME", required=False)
+    S3_PUBLIC_BUCKET = config.get_global("S3_PUBLIC_BUCKET", required=False)
+    
+    matches: list[tuple[str, str]] = []
+    if config.is_prod():
+        matches: list[tuple[str, str]] = re.findall(fr"\[(.*)\]\((https?:\/\/(?:{S3_FILES_BUCKET_NAME}|{S3_PUBLIC_BUCKET}).+)\)", markdown_content) or []
+    else:
+        MINIO_API_PORT_NUMBER = config.get_global("MINIO_API_PORT_NUMBER", required=False)
+        matches: list[tuple[str, str]] = re.findall(fr"\[(.*)\]\((http:\/\/localhost:{MINIO_API_PORT_NUMBER}\/(?:{S3_FILES_BUCKET_NAME}|{S3_PUBLIC_BUCKET}).+)\)", markdown_content) or []
 
-    for url, text in matches:
+
+    for text, url in matches:
         filename = urlparse(url).path.split("/")[-1]
 
         # Find if the file has already been uploaded
@@ -76,7 +81,7 @@ async def upload_files_to_slack(
 
         # If the file has been uploaded, just replace the link
         if uploaded_file:
-            return markdown_content.replace(f"<{url}|{text}>", f"<{uploaded_file.slack_link}|{text}>")
+            return markdown_content.replace(f"[{text}]({url})", f"[{text}]({uploaded_file.slack_link})")
 
         if filename not in map(lambda file: file.filename, uploaded_files):
             try:
@@ -94,7 +99,7 @@ async def upload_files_to_slack(
                         file_slack_link = file_upload_response.get("file", {}).get("permalink", "")
                         # Mark the file as upload to prevent duplicates
                         uploaded_files.append(SlackUploadedFile(filename, file_slack_link))
-                        return markdown_content.replace(f"<{url}|{text}>", f"<{file_slack_link}|{text}>")
+                        return markdown_content.replace(f"[{text}]({url})", f"[{text}]({file_slack_link})")
                     else:
                         logger.error("[Slack] Unable to upload file to Slack")
                 else:
