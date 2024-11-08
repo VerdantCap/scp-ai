@@ -18,13 +18,13 @@ if [ "$#" -ge 1 ]; then
         $BASECMD alembic upgrade head   
     elif [ "$1" == "makemigrations" ]; then
         $BASECMD alembic revision --autogenerate
-    elif [ "$1" == "check" ]; then
-        $BASECMD alembic check
+    elif [ "$1" == "alembic" ]; then
+        $BASECMD alembic $2
     elif [ "$1" == "history" ]; then
         $BASECMD alembic history
     elif [ "$1" == "docker" ]; then
-        echo docker run -it -v ./storage:/code/storage --env-file ~/envs/docker-agents.env -p 8080:8080 agents
-        docker run -it -v ./storage:/code/storage --env-file ~/envs/docker-agents.env -p 8080:8080 -p 8002:8002 agents
+        echo docker run -it -v ./storage:/code/storage --env-file ../.env -p 8080:8080 agents
+        docker run -it -v ./storage:/code/storage --env-file ../.env -p 8080:8080 -p 8002:8002 agents
     elif [ "$1" == "triggersvc" ]; then
         echo docker run -it -v ./storage:/code/storage --env-file ~/envs/docker-agents.env -p 8080:8080 agents python -m supercog.engine.triggersvc
         docker run -it -v ./storage:/code/storage --env-file ~/envs/docker-agents.env -p 8080:8080 -p 8002:8002 agents python -m supercog.engine.triggersvc

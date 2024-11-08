@@ -113,20 +113,21 @@ async def respond_to_user_message(
                     )
                     batch = ""
             elif isinstance(agevent, EnableToolEvent):
-                # Need to update the Dashboard agent model for the new tool. 
-                with rx.session() as session:
-                    agent = session.get(Agent, agevent.agent_id)
-                    if agent:
-                        if len([t for t in agent.tools if t.tool_factory_id == agevent.tool_factory_id]) == 0:
-                            # safe to add Tool
-                            tool = Tool(
-                                agent_id=agent.id,
-                                tool_name = agevent.name,
-                                tool_factory_id=agevent.tool_factory_id,
-                                credential_id = agevent.credential_id,
-                            )
-                            session.add(tool)
-                            session.commit()
+                pass
+                # Don't do anything Dashboard side with tool events. Leave those local to the Run. 
+                # with rx.session() as session:
+                #     agent = session.get(Agent, agevent.agent_id)
+                #     if agent:
+                #         if len([t for t in agent.tools if t.tool_factory_id == agevent.tool_factory_id]) == 0:
+                #             # safe to add Tool
+                #             tool = Tool(
+                #                 agent_id=agent.id,
+                #                 tool_name = agevent.name,
+                #                 tool_factory_id=agevent.tool_factory_id,
+                #                 credential_id = agevent.credential_id,
+                #             )
+                #             session.add(tool)
+                #             session.commit()
 
         if len(batch) > 0:
             full_reply += batch

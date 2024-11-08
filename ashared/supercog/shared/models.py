@@ -2,7 +2,7 @@ from click import Option
 from pydantic import BaseModel
 from sqlmodel import Field, Column, SQLModel, ARRAY, String, Integer
 from uuid import UUID, uuid4
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import json
 import re
@@ -19,7 +19,23 @@ class ToolBase(SQLModel):
     description: Optional[str] = None
     agent_id: str
     credential_id: Optional[str] = None
+
+# "enabled_indexes" on the Agent will be a JSON serialized array of these objects
+class DocIndexReference(BaseModel):
+    index_id: str
+    name: str
     
+    def json(self) -> str:
+        return json.dumps({"index_id": self.index_id, "name": self.name})
+    
+    @classmethod
+    def from_json(cls, json_str: str) -> "DocIndexReference":
+        data = json.loads(json_str)
+        return cls(index_id=data["index_id"], name=data["name"])
+
+
+PERSONAL_INDEX_NAME = "personal"
+
 # All Agents (Dashboard persisted model and Engine json-seralized version)
 # share these base attributes. The different side versions differ on the 'tools'
 # attribute being either a relation or a nested JSON blob.
@@ -40,6 +56,7 @@ class AgentCore(SQLModel):
     max_agent_time: Optional[int] = 600
     memories_json: Optional[str] = "" # JSON Array of memories [{ "memory" : "Before attempting an INSERT operation check DB.", "ts": "1718287315", "enabled": "True" }]
     implicit_tools: Optional[str] = None # comma separated list of tool ids
+    enabled_indexes: Optional[str] = ""
     max_chat_length: int|None = None
     state: Optional[str] = None
     
@@ -61,6 +78,17 @@ class AgentCore(SQLModel):
         self.memories_json = json.dumps(mems)
         return mems
 
+    def get_enabled_indexes(self) -> List[DocIndexReference]:
+        refs: list = json.loads(self.enabled_indexes or "[]")
+        return [DocIndexReference(**d) for d in refs]
+
+    def enable_rag_index(self, name: str, index_id: str|None=None):
+        refs = self.get_enabled_indexes()
+        refs.append(DocIndexReference(index_id=index_id or "", name=name))
+        try:
+            self.enabled_indexes = json.dumps([r.model_dump() for r in refs])
+        except AttributeError:
+            self.enabled_indexes = json.dumps([r.dict() for r in refs])
 
 class AgentBase(AgentCore):
     # Tools are a structured object, stored in the dashboard. I don't
@@ -164,11 +192,16 @@ class DocIndexBase(SQLModel):
     folder_ids: str = "" # comma separated list of folder ids
     file_patterns: str = "" # comma separated list of file patterns
 
+    @staticmethod
+    def calc_user_personal_index_id(user_id: str, tenant_id: str) -> str:
+        return f"personal_{user_id[0:13]}_{tenant_id[0:13]}"
+
 class DocSourceConfigCreate(BaseModel):
     id: Optional[str] = None
     name: Optional[str] = ""
     doc_index_id: str
     doc_source_factory_id: str
+    provider_data: Optional[dict] = {}
     folder_ids: Optional[List[str]] = []
     file_patterns: Optional[List[str]] = []
 

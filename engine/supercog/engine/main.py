@@ -56,6 +56,7 @@ from supercog.shared.models import (
     Datum, 
     DocIndexBase,
     DocSourceConfigCreate,
+    PERSONAL_INDEX_NAME,
 )
 
 from supercog.shared.apubsub import pubsub, AGENT_EVENTS_CHANNEL, AgentSavedEvent, RunUpdatedEvent
@@ -92,6 +93,10 @@ from .filesystem import (
     get_agent_filesystem,
 )
 from .tool_factory import TOOL_REGISTRY
+
+from supercog.engine.tools.website_docs import WebsiteDocSource
+from supercog.engine.tools.google_drive import GoogleDriveDocSource
+from supercog.engine.doc_source_factory import DocSourceFactory
 
 # Need this import to register chat_logger with the FastAPI app
 from .chat_logger import activate_chatlogger
@@ -245,7 +250,9 @@ async def save_agent(*,
     # The logic is that the Dashboard will POST a copy of the agent too us
     # whenver it is changed on the FE by the user. Later the Dashboard (or
     # a trigger) can post to RUNS to actually run the agent.
-    agent_db = db.Agent.model_validate(agent_base)
+    vals = agent_base.model_dump()
+    print(vals)
+    agent_db = db.Agent.model_validate(vals)
     logger.info("Received POST agent: ", agent_db)
     existing = session.get(db.Agent, agent_db.id)
     if existing:
@@ -1263,15 +1270,15 @@ async def test_cred(*,
 
     # This is all so that a tool (like AuthRESTTool) can do "test credentials" and
     # verify that env vars exist.
-    env_var_list = secrets_service.list_credentials(user.tenant_id, user.user_id, "ENV:", include_values=True)
+    env_var_list = secrets_service.list_credentials(cred.tenant_id, user.user_id, "ENV:", include_values=True)
     env_vars = {k[4:]: v for k, v in env_var_list}
 
-    run_context = RunContext.create_squib_context(user.tenant_id, user.user_id, env_vars)
+    run_context = RunContext.create_squib_context(cred.tenant_id, user.user_id, env_vars)
     tool_factory.run_context = run_context
 
     # FIXME: I don't like that this is here or required, but I don't an alternative other than
     # to now allow tools to require the filesystem to test creds.    
-    with get_agent_filesystem(user.tenant_id, user.user_id):
+    with get_agent_filesystem(cred.tenant_id, user.user_id):
         if inspect.iscoroutinefunction(tool_factory.test_credential):
             result = await tool_factory.test_credential(cred, secrets)
         else:
@@ -1514,7 +1521,9 @@ async def get_file(*,
 
     return create_presigned_url(s3, bucket_name, object_name)
 
-# Upload a file to the cloud filesystem
+# Upload a file to the cloud filesystem. If you specify index=True and a Run then we
+# will retrieve the agent from the Run, and if the agent has a default RAG index then the
+# file will be added to that index.
 @app.post("/tenant/{tenant_id}/{drive}/files")
 async def create_file(*,
           session: Session = Depends(get_session),
@@ -1522,6 +1531,8 @@ async def create_file(*,
           tenant_id: str,
           drive: str,
           folder: str,
+          index: Optional[bool] = False,
+          run_id: Optional[str] = None,
           file: UploadFile = File(...),
           background_tasks: BackgroundTasks,
           ) -> str:
@@ -1546,23 +1557,36 @@ async def create_file(*,
 
     print("Wrote user file: ", user_file)
 
-    mime_type, _ = mimetypes.guess_type(user_file, False)
-    if mime_type is not None and not mime_type.startswith("image/"):
-        # Index non image files
-        index = get_user_personal_index(user, session)
-        if index:
-            print("Queueing upload file to add to personal index")
-            await file.seek(0)
-            background_tasks.add_task(
-                add_index_file, 
-                session=session, user=user,
-                tenant_id=tenant_id, 
-                index_id=index.id, 
-                user_id=user_id,
-                file=str(temp_file.name),
-            )
-        else:
-            print("NO PERSONAL INDEX FOUND")
+    if index and run_id:
+        mime_type, _ = mimetypes.guess_type(user_file, False)
+        if mime_type is not None and not mime_type.startswith("image/"):
+            # Index non image files
+            run = session.get(Run, run_id)
+            if run:
+                agent = session.get(Agent, run.agent_id)
+                if agent:
+                    indices = agent.get_enabled_indexes()
+                    if len(indices) > 0:
+                        print("Queueing upload file to add to personal index")
+                        await file.seek(0)
+                        background_tasks.add_task(
+                            add_index_file, 
+                            session=session, 
+                            user=user,
+                            tenant_id=tenant_id, 
+                            index_id=indices[0].index_id, 
+                            user_id=user_id,
+                            file=str(temp_file.name),
+                        )
+                    else:
+                        logger.warn(f"No indexes enabled for agent {agent.id} - {agent.name}")
+                else:
+                    logger.warn(f"Agent not found for run {run_id}")
+            else:
+                logger.warn(f"Run not found for run {run_id}")
+
+    elif index and run_id is None:
+        rollbar.report_message(f"Indexing request for file {user_file} but run_id is None", "error")
 
     return upload_file_to_s3(
         temp_file.name, 
@@ -1656,6 +1680,16 @@ async def create_index(*,
         index_input: DocIndexBase,
         ) -> db.DocIndex:
     index = db.DocIndex.model_validate(index_input)
+    existing = session.exec(
+        select(db.DocIndex).where(
+            db.DocIndex.tenant_id == index.tenant_id,
+            db.DocIndex.user_id == index.user_id,
+            db.DocIndex.name == index.name,
+        )
+    ).first()
+    if existing is not None:
+        return existing
+    
     session.add(index) #need the Cred ID in order to store the secrets
     session.commit()
     session.refresh(index)
@@ -1700,12 +1734,13 @@ async def list_indexes(*,
             tenant_id: str,
             user_id: str
             ) -> list[db.DocIndex]:
-    if user_id != user.user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    
+    # FIXME: Validate the JWT user is at least a member of the indicate Tenant
     query = select(db.DocIndex).where(
         db.DocIndex.tenant_id == tenant_id,
-        db.DocIndex.id == user.personal_index_id(),
+        or_(
+            db.DocIndex.user_id == user_id,
+            db.DocIndex.scope == 'shared',
+        )
     )
     results = list(session.exec(query).all())
     if len(results) == 0:
@@ -1714,7 +1749,7 @@ async def list_indexes(*,
             id = user.personal_index_id(),
             tenant_id=tenant_id,
             user_id=user_id,
-            name="Personal Knowledge",
+            name=PERSONAL_INDEX_NAME,
             scope="private",
         )
         session.add(index)
@@ -1748,12 +1783,13 @@ async def add_doc_source(
     index_id: str,
     session: Session = Depends(get_session),
     user: User = Depends(requires_jwt),
-    config_input: DocSourceConfigCreate
+    config_input: DocSourceConfigCreate,  # Change to accept raw dict instead of model
+    background_tasks: BackgroundTasks
 ) -> db.DocSourceConfig:
     # Check if the DocIndex exists and belongs to the tenant
     doc_index = session.exec(
         select(db.DocIndex).where(
-            db.DocIndex.tenant_id == user.tenant_id,
+            db.DocIndex.tenant_id == tenant_id,
             db.DocIndex.id == index_id
         )
     ).first()
@@ -1761,14 +1797,46 @@ async def add_doc_source(
         raise HTTPException(status_code=404, detail="DocIndex not found")
     
     # Create the DocSourceConfig
-    vals = config_input.dict()
+    vals = config_input.model_dump()
+    
+    # Ensure provider_data is properly set
+    provider_data = vals.get("provider_data")
+    if isinstance(provider_data, dict):
+        vals["provider_data"] = provider_data
+    elif isinstance(provider_data, str):
+        try:
+            vals["provider_data"] = json.loads(provider_data)
+        except json.JSONDecodeError:
+            vals["provider_data"] = {"raw": provider_data}
+    
     doc_source_config = db.DocSourceConfig.model_validate(vals)
     session.add(doc_source_config)
     session.commit()
     session.refresh(doc_source_config)
 
     # Make a background task to call get_documents
+    background_tasks.add_task(process_documents, doc_source_config, index_id, user.user_id, user.tenant_id)
+
     return doc_source_config
+
+
+async def process_documents(doc_source_config: DocSourceConfig, index_id: str, user_id: str, tenant_id: str):
+    print("sleeping")
+    await asyncio.sleep(2)
+    print("Sleep is done")
+    factory: DocSourceFactory = get_doc_source_factory_instance(doc_source_config)
+    try:
+        async for document in factory.get_documents(
+            folder_id=None,
+            tenant_id=tenant_id,
+            index_id=index_id,
+            **doc_source_config.provider_data,
+        ):
+            print(f"Indexing document: {document}")
+            # TODO: Index the document
+    except Exception as e:
+        print(f"Error processing documents: {e}")
+        raise  # Re-raise to ensure error is properly handled
 
 @app.get("/tenant/{tenant_id}/doc_indexes/{index_id}/sources")
 async def get_doc_sources(
@@ -1826,7 +1894,7 @@ async def get_doc_source_authorize_url(
     factory = get_doc_source_factory_instance(source)
 
     link = factory.get_authorize_url(
-        tenant_id = user.tenant_id, 
+        tenant_id = tenant_id, 
         user_id=user.user_id, 
         index_id=index_id, 
         source_id=source_id
@@ -1911,6 +1979,7 @@ async def add_index_file(*,
             file=open(file, "rb"),            
         )
 
+    partition = get_ragie_partition(tenant_id, index_id)
     opts = {
         "file": {
             "file_name": file.filename,
@@ -1921,9 +1990,9 @@ async def add_index_file(*,
             "user_id": user_id,
             "tenant_id": tenant_id
         },
-        "partition": get_ragie_partition(user.tenant_id, user.user_id, index_id),
+        "partition": partition,
     }
-    print("Uploading file to Ragie: ", file.filename)
+    print(f"Uploading file to Ragie partition {partition}: ", file.filename)
     r = ragie.documents.create(
         request = opts
     )
@@ -1942,7 +2011,7 @@ async def list_index_files(*,
             ) -> list[dict]:
     """ List the files in a DocIndex """
     res = ragie.documents.list(
-        request = {"partition": get_ragie_partition(user.tenant_id, user.user_id, index_id)}
+        request = {"partition": get_ragie_partition(tenant_id, index_id)}
     )
     current_page = 1
     next_func = res.next
@@ -1985,7 +2054,7 @@ async def search_index_files(*,
     response = ragie.retrievals.retrieve(
         request = {
             "query": query,
-            "partition": get_ragie_partition(user.tenant_id, user.user_id, index_id),
+            "partition": get_ragie_partition(tenant_id, index_id),
             # "top_k": 10
         }
     )

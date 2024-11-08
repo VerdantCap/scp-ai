@@ -22,7 +22,7 @@ class DocSourceFactory(ToolFactory):
     async def authorize_callback(self, params: dict):
         pass
 
-    async def get_documents(self, folder_id: str) -> AsyncGenerator[Document, None]:
+    async def get_documents(self, folder_id: str, **kwargs) -> AsyncGenerator[Document, None]:
         """ Yields a list of documents from the indicated folder. """
         pass
 

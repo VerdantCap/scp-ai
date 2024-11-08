@@ -257,8 +257,11 @@ class ToolFactory(BaseModel):
     def get_dataframe_preview(self, df: pd.DataFrame, max_rows=5, name_hint:str|None=None,
                               sanitize_column_names=True) -> dict:
         row_label = "all_rows"
+        includes_all = True
         if df.shape[0] > max_rows:
             row_label = "preview"
+            includes_all = False
+
         preview_rows = df.head(max_rows).astype(str).values.tolist()
         name = self.make_dataframe_name(name_hint)
 
@@ -280,6 +283,11 @@ class ToolFactory(BaseModel):
             pickle.dumps(df),
             content_type="application/pickle",
         )
+        if includes_all:
+            hint = {}
+        else:
+            hint = {"hint": "On request, use load_full_preview_content to get all rows"}
+
         return {
             "type":"dataframe",
             "name": name,
@@ -287,8 +295,8 @@ class ToolFactory(BaseModel):
             "columns": df.columns.tolist(),
             "row_count": df.shape[0],
             row_label: preview_rows,
-            "hint": "On request, use load_full_preview_content to get all rows"
-        }
+            
+        } | hint
 
     def get_dataframe_from_handle(self, handle: any) -> tuple[pd.DataFrame, str]:
         if isinstance(handle, str) and handle in self.inmem_state:

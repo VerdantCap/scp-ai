@@ -65,7 +65,7 @@ Use LLM vision to analyze images
                 response = requests.get(download_url)  
                 response.raise_for_status()
                 image_data = response.content
-            except Excetion as e:
+            except Exception as e:
                 pass
         # Check image length and chunk if necessary
         image_chunks = await self.chunk_image(image_data, max_height)

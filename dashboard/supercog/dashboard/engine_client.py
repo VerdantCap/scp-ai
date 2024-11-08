@@ -635,11 +635,12 @@ class EngineClient:
         r = self._delete(f"/tenant/{tenant_id}/{user_id}/secrets", params={"key": key})
         r.raise_for_status()
 
-    def create_doc_index(self, tenant_id, user_id, index_name: str) -> dict:
+    def create_doc_index(self, tenant_id, user_id, index_name: str, scope: str = "private") -> dict:
         record = DocIndexBase(
             name=index_name,
             tenant_id=tenant_id,
             user_id=user_id,
+            scope=scope,
         )
         r = self._post(f"/tenant/{tenant_id}/doc_indexes", json=record.model_dump(exclude={'id'}))
         r.raise_for_status()
@@ -677,19 +678,26 @@ class EngineClient:
             doc_source_factory_id, 
             doc_source_name,
             folder_ids, 
-            file_patterns
+            file_patterns,
+            provider_data=None
         ) -> dict:
 
         source = DocSourceConfigCreate(
             name=doc_source_name,
             doc_index_id=index_id,
-            doc_source_factory_id = doc_source_factory_id,
-            folder_ids= folder_ids,
-            file_patterns= file_patterns,
+            doc_source_factory_id=doc_source_factory_id,
+            folder_ids=folder_ids,
+            file_patterns=file_patterns,
+            provider_data=provider_data  # This will contain the URL
         )
+        # Convert to dict and ensure provider_data is included
+        data = source.dict()
+        if provider_data:
+            data["provider_data"] = provider_data  # Ensure provider_data is explicitly set
+            
         r = self._post(
             f"/tenant/{tenant_id}/doc_indexes/{index_id}/sources",
-            json=source.dict(),
+            json=data,
         )
         print("Result: ", r.text)
         r.raise_for_status()
@@ -805,13 +813,20 @@ class EngineClient:
         r.raise_for_status()
         return r.json()
     
-    async def upload_file(self, tenant_id: str, user_id: str, folder: str,
-                    file: rx.UploadFile,
-                    drive: str = 'default'):
+    async def upload_file(
+            self, 
+            tenant_id: str, 
+            user_id: str, 
+            folder: str,
+            file: rx.UploadFile,
+            drive: str = 'default',
+            index_file: bool = False,
+            run_id: str|None=None
+        ):
         content = await file.read()
         r = self._post(
             f"/tenant/{tenant_id}/{drive}/files",
-            params={"folder": user_id + ":" + folder},
+            params={"folder": self.user_id + ":" + folder, "index": index_file, "run_id": run_id},
             files={
                 "file": (file.filename, content, file.content_type)
             }
@@ -820,10 +835,12 @@ class EngineClient:
 
     async def upload_slack_file(self, folder: str, file_name: str, content: bytes,
                     content_type: str,
-                    drive: str = 'default'):
+                    drive: str = 'default',
+                    index_file: bool = False,
+                    run_id: str|None=None):
         r = self._post(
             f"/tenant/{self.tenant_id}/{drive}/files",
-            params={"folder": self.user_id + ":" + folder},
+            params={"folder": self.user_id + ":" + folder, "index": index_file, "run_id": run_id},
             files={
                 "file": (file_name, content, content_type)
             }

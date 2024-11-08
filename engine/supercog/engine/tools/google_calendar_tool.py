@@ -1,5 +1,5 @@
 from supercog.engine.tool_factory import ToolFactory, ToolCategory
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Dict
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta
 from supercog.shared.services import config
@@ -43,11 +43,107 @@ class GoogleCalendarTool(ToolFactory, GAuthCommon):
             self.get_events_by_date_range,
             self.create_event,
             self.update_event,
-            #self.delete_event,
-            #self.get_calendar_list,
             self.get_event_details,
-            self.get_attendee_status
+            self.get_attendee_status,
+            self.count_events_in_range,
         ])
+
+    def count_events_in_range(self,
+                            start_date: str,
+                            end_date: str,
+                            group_by: str = "none",
+                            calendar_id: str = 'primary') -> Dict:
+        """
+        Count events within a specific date range, with grouping of "none", "daily", "weekly", "monthly"
+        
+        Args:
+            start_date (str): Start date in ISO format (YYYY-MM-DD)
+            end_date (str): End date in ISO format (YYYY-MM-DD)
+            group_by (str): How to group the counts. Options:
+                          - "none": Simple total count (default)
+                          - "daily": Count events per day
+                          - "weekly": Count events per week
+                          - "monthly": Count events per month
+            calendar_id (str): Calendar ID to fetch events from (default: 'primary')
+            
+        Returns:
+            Dict: Contains count information and optional breakdown
+        """
+        try:
+            service = self.get_service()
+            
+            # Convert dates to datetime and add time components
+            start_datetime = f"{start_date}T00:00:00Z"
+            end_datetime = f"{end_date}T23:59:59Z"
+            
+            events_result = service.events().list(
+                calendarId=calendar_id,
+                timeMin=start_datetime,
+                timeMax=end_datetime,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            events = events_result.get('items', [])
+            
+            if not events:
+                return {
+                    "status": "success",
+                    "total_count": 0,
+                    "message": f"No events found between {start_date} and {end_date}",
+                }
+
+            # Initialize response
+            response = {
+                "status": "success",
+                "total_count": len(events),
+                "date_range": f"{start_date} to {end_date}"
+            }
+
+            # Handle grouping if requested
+            if group_by != "none":
+                counts_by_period = {}
+                
+                for event in events:
+                    # Get event start time
+                    start = event['start'].get('dateTime', event['start'].get('date'))
+                    event_date = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                    
+                    # Generate the appropriate key based on grouping
+                    if group_by == "daily":
+                        key = event_date.strftime('%Y-%m-%d')
+                    elif group_by == "weekly":
+                        # Get the Monday of the week
+                        monday = event_date - timedelta(days=event_date.weekday())
+                        key = monday.strftime('%Y-%m-%d')
+                    elif group_by == "monthly":
+                        key = event_date.strftime('%Y-%m')
+                    
+                    counts_by_period[key] = counts_by_period.get(key, 0) + 1
+
+                # Convert to list of dicts for DataFrame
+                breakdown_data = [
+                    {"period": period, "count": count}
+                    for period, count in sorted(counts_by_period.items())
+                ]
+                
+                # Create DataFrame and add to response
+                df = pd.DataFrame(breakdown_data)
+                df_preview = self.get_dataframe_preview(df, name_hint="event_counts")
+                response["breakdown"] = df_preview
+                
+                # Add text summary
+                response["summary"] = f"Found {len(events)} total events.\n\n"
+                for period, count in sorted(counts_by_period.items()):
+                    response["summary"] += f"{period}: {count} events\n"
+
+            return response
+            
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Error counting events: {str(e)}",
+            }
 
     def get_oauth_client_id_and_secret(self) -> tuple[str|None, str|None]:
         """Return the OAuth client credentials from global config."""

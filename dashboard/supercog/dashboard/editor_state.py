@@ -27,7 +27,7 @@ import timeago
 import base64
 
 from supercog.shared import timeit
-from supercog.shared.models import RunOutput, RunUpdate, RunLogBase, CredentialBase, RunBase
+from supercog.shared.models import RunOutput, RunUpdate, RunLogBase, CredentialBase, RunBase, PERSONAL_INDEX_NAME
 from supercog.shared.logging import logger
 from supercog.shared.apubsub import (
     pubsub, 
@@ -188,7 +188,7 @@ class EditorState(AgentsCommonState, PromptHelpers):
         if self.user.is_anonymous():
             return
         if self.avail_models == [] or self.credentials_list_dirty:
-            self.load_lists()
+            self.load_lists(force=True)
 
         self.editor_pane_class = ""
 
@@ -254,11 +254,11 @@ class EditorState(AgentsCommonState, PromptHelpers):
         return [EditorState.bg_load_runs, EditorState.bg_load_files, EditorState.mark_user_seen_editor(is_supercog)]
 
     @timeit
-    def load_lists(self):
+    def load_lists(self, force:bool = False):
         logger.debug("EditState, load lists")
         if len(self.folders) == 0:
             self.load_folders()
-        self.load_connections()
+        self.load_connections(force)
         self.load_agent_tools_list()
         self.load_agents_list()
         self.avail_models = []
@@ -301,7 +301,7 @@ class EditorState(AgentsCommonState, PromptHelpers):
     def refresh_tools(self):
         self.load_tool_factories()
         self.refresh_agents()
-        self.load_lists()
+        self.load_lists(force=True)
 
     async def auto_remove_tools(self):
         # Special logic to auto-remove "old" tools from the Supercog agent so the user doesn't have to
@@ -458,7 +458,7 @@ class EditorState(AgentsCommonState, PromptHelpers):
                 f = self._get_agents_folder()
                 if f:
                     folder_id = f.id
-            self._agent.update_from_state(self.app, folder_id)
+            self._agent.update_from_state(self.app, folder_id, self.doc_indexes)
 
             sess.add(self._agent)
             sess.commit()
@@ -537,6 +537,8 @@ class EditorState(AgentsCommonState, PromptHelpers):
             updated_at=None,
             scope=scope,
         )
+        if scope == 'private':
+            self.app.index_list = PERSONAL_INDEX_NAME
         await self.save_agent()
 
     async def clear_agent_state(self):
@@ -810,7 +812,7 @@ class EditorState(AgentsCommonState, PromptHelpers):
             f = self._get_agents_folder()
             if f:
                 folder_id = f.id
-            self._agent.update_from_state(self.app, folder_id)
+            self._agent.update_from_state(self.app, folder_id, self.doc_indexes)
             sess.add(self._agent)
             sess.commit()
             sess.refresh(self._agent)
@@ -2228,11 +2230,14 @@ class EditorState(AgentsCommonState, PromptHelpers):
             file.filename = remove_non_ascii(file.filename)
             self.temp_upload_file = file.filename
             yield
+            # FIXME: we can't index a chat file upload if the Run hasn't been started yet
             await self._agentsvc.upload_file(
                 self.user.tenant_id,
                 self.user_id,
                 "uploads",
                 file,
+                index_file=True,
+                run_id=self.__run.get('id') if self.__run else None,
             )
 
         yield rx.clear_selected_files("upload_chat")

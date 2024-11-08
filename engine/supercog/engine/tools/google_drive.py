@@ -58,7 +58,7 @@ Load documents from Google Drive (Connection must be established through Ragie!)
                 "redirect_uri": redirect_url,
                 "metadata": {},
                 "mode": "hi_res",
-                "partition": get_ragie_partition(tenant_id, user_id, index_id)
+                "partition": get_ragie_partition(tenant_id, index_id)
             }
 
             # Get the Ragie OAuth URL

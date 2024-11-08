@@ -4,10 +4,10 @@ from sqlalchemy import func
 from .jwt_auth import User
 from .db import DocIndex
 
-PERSONAL_INDEX_NAME = "personal"
+from supercog.shared.models import PERSONAL_INDEX_NAME
 
-def get_ragie_partition(tenant_id, user_id, index_id):
-    return f"{user_id}__{index_id}"
+def get_ragie_partition(tenant_id, index_id):
+    return f"{tenant_id}__{index_id}"
 
 def get_user_personal_index(user: User, session: Session) -> DocIndex|None:
     # get DocIndex

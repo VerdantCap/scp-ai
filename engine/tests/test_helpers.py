@@ -28,6 +28,7 @@ def run_context():
             enabled_tools=["zyte_search"],
             user_email="scottp@supercog.ai",
             run_scope="private",
+            doc_indexes=[],
         )
     )
 

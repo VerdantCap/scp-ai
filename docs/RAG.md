@@ -121,4 +121,82 @@ on what the user wants to achieve.
 Each user will get a default index, _Personal Knowledge_ to which documents can be added
 by default. So any file uploaded in a chat to Supercog will be added to this index.
 
+## Managing RAG indexes
+
+I would like to add @Supercog to a shared Slack channel, and have it semi-autotmatically
+know to put docs and web sites shared with it into an index dedicated to that channel.
+
+    @supercog please add this <doc> to your memory
+    <-- ok, <doc> added to my index
+    ...
+    @supercog please add these docs to your memory: https://docs.ragie.ai/reference/createdocument
+    <-- web site pages will be indexed 
+
+    @supercog how does the Ragie API handle authentication?
+    ..thinking...
+    <-- the answer is: ...
+
+Now I might want to still ask this agent questions from some other index, like 
+
+    @supercog how does our custom auth work? Check the confluence index
+
+But having to specify the index is pretty clumsy. It would be good instead if the agent
+had a set of "enabled indexes" that would always get used by any RAG query. This way
+we could "enable" the Personal index for the private Agent, but a user could enable some
+shared index if they wanted:
+
+    @supercog enable the confluence knowledge index
+    @supercog how do we handle internal auth?
+
+So we could build on these functions:
+
+    list_knowledge_indexes  > returns the list of available indexes
+    enable_knowlege_index   > enable an index for retrieval
+    search_knowledge        > search across all enabled indexes
+
+The first enable index would be the "default" and any files uploaded to the agent
+can be automatically added to that index. Otherwise people need to populate
+indexes via the Dashboard, or they can enable the RAG Tool which could add
+these functions:
+    create_knowledge_index
+    add_doc_to_index
+    add_site_to_index
+
+### Implementation
+
+For the imlementation we can add an `enabled_indexes` attribute to the Agent which stores the enabled
+indexes by DocIndex.id, name pairs. A user should be able to enable/remove indexes for an
+agent in the Dashboard.
+
+When we create the shared Agent that lives under a public Slack channel, we can auto create
+a corresponding DocIndex and enable it as the default for the agent. Any files uploaded to the
+agent can be added to this index (either automatically or by command).
+
+`list_knowledge_indexes` for private use should return all private and shared indexes that 
+a user has access to. In public use it should only return public indexes. We can decide if
+a "Slack channel index" should be returned in this list by default.
+
+`AutoDynamicTools` should export the `search_knowledge` function. I'm not sure if
+it should export list_indexes/enable_index or not, or if those should be part of the RAG tool.
+
+### Index identity and Ragie partitions
+
+An "index" has both a name and an ID. When we create the index, it is created and owned by
+a user and tenant, but a unique ID is generated for it.
+
+The Connections page lists all of the indexes that a user can see, those that it owns and
+those that are "shared" in the tenant.
+
+We map `tenant_id__index_id` into the Ragie partition, just for identity purposes even though
+the index id should be unique anyway. Look at `get_ragie_partition` in rag_utils.py.
+
+Each user gets a default index called "personal" which we use for their Slack-private agents.
+
+Each Agent gets a `enabled_indexes` list which is a JSON blob containing the index names+IDs
+of the indexes that the user has enabled for the agent.
+
+In Slack-world we automatically enable the `personal` index for the private agent, and channel-named
+shared agents for public channels.
+
+
 

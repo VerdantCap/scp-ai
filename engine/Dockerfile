@@ -27,7 +27,7 @@ RUN git rev-parse HEAD > GIT_SHA
 FROM python:3.11-slim-bookworm as runtime
 
 RUN apt-get update \
-    && apt-get -y --no-install-recommends install git nmap \
+    && apt-get -y --no-install-recommends install git nmap mime-support \
     && rm -rf /var/lib/apt/lists/*
 
 USER www-data

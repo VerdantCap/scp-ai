@@ -2,8 +2,10 @@ from typing import List, Callable, ClassVar
 import traceback
 from supercog.engine.tool_factory import ToolFactory, LLMFullResult, ToolCategory
 from supercog.shared.services import config
+from supercog.shared.models import DocIndexReference
 from ragie import Ragie
 from sqlmodel import Session, select
+import pandas as pd
 from ..db import DocIndex
 from ..rag_utils import lookup_index, get_user_personal_index, get_ragie_partition
 from ..jwt_auth import User as JWTUser
@@ -96,7 +98,7 @@ class RagieTool(ToolFactory):
             else:
                 return "Personal index not found."
 
-            partition = get_ragie_partition(self.run_context.tenant_id, self.run_context.user_id, index_id)
+            partition = get_ragie_partition(self.run_context.tenant_id, index_id)
             response = self.ragie.documents.list(
                 request={
                     "filter": {
@@ -137,23 +139,16 @@ class RagieTool(ToolFactory):
             index_name: str = "personal", 
             threshold: float = 0.1,
             query: str = None
-        ) -> list[dict]|str:
+        ) -> dict:
         """Search for documents in the given named index. Provide threshold to determine
             how relevant the search results should be."""
         try:
-            with self.run_context.get_db_session() as session:
-                index = lookup_index(
-                    index_name,
-                    self.run_context.get_user_object(), 
-                    session
-                )
-            index_id = ""
-            if index:
-                index_id = index.id
-            else:
-                return f"Index {index_name} not found."
+            index: DocIndexReference|None = self.run_context.find_doc_index_by_name(index_name)
+            if index is None:
+                avail = ",".join([i.name for i in self.run_context.get_doc_indexes()])
+                return f"Index {index_name} not found. Available indexes: {avail}."
 
-            partition = get_ragie_partition(self.run_context.tenant_id, self.run_context.user_id, index_id)
+            partition = get_ragie_partition(self.run_context.tenant_id, index.index_id)
             response = self.ragie.retrievals.retrieve(
                 request = {
                     "query": query,
@@ -162,8 +157,22 @@ class RagieTool(ToolFactory):
                 }
             )
             # framework will automatically convert list[dict] into a Dataframe (preview)
-            filtered = [r for r in response.scored_chunks if r.score >= threshold]
-            return [r.model_dump() for r in filtered]
+
+            # The logic here to first take matching chunks, but then add other chunks from the same
+            # documents to fill out the list. I found this necessary for spreadsheets.
+            results = []
+            docs_added = set()
+            for chunk in response.scored_chunks:
+                if chunk.score >= threshold:
+                    results.append(chunk.model_dump())
+                    docs_added.add(chunk.document_id)
+
+            for chunk in response.scored_chunks:
+                if chunk.score < threshold and chunk.document_id in docs_added:
+                    results.append(chunk.model_dump())
+
+            df = pd.DataFrame(results)
+            return self.get_dataframe_preview(df, max_rows=8)
 
         except Exception as e:
             traceback.print_exc()
