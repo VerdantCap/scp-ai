@@ -30,7 +30,7 @@ Load documents from Notion (Connection must be established with pages!)
 
         )
 
-    async def get_documents(self, folder_id: str=None) -> AsyncGenerator[Document, None]:
+    async def get_documents(self, folder_id: str=None, **kwargs) -> AsyncGenerator[Document, None]:
         """
         Returns a list of documents from Notion.
         """

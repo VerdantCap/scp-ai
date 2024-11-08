@@ -65,7 +65,7 @@ class RAGIndexState(AgentsCommonState):
                 id = d['id'],
                 name = d['name'] or "",
                 system_name = lookup_system_name(d),
-                factory_id = d['doc_source_factory_id'],
+                factory_id = d['doc_source_factory_id'] or "",
                 folder_ids = ", ".join(d['folder_ids']),
                 file_patterns = ", ".join(d['file_patterns']),
                 provider_data = str(d.get("provider_data", {})),
@@ -201,15 +201,30 @@ class RAGIndexState(AgentsCommonState):
         config_list = config_list
         return config_list, help_msg
 
-    def set_docsource_value(self, key: str, value: str):
+    async def set_docsource_value(self, key: str, value: str):
+        from .editor_state import EditorState
+
         setattr(self.doc_source, key, value)
+        edit_state = await self.get_state(EditorState)
+        edit_state.credentials_list_dirty = True
+
 
     def save_docsource(self):
-        self._save_docsource()
+
+        provider_data = {}
+        for key, _, _ in self.doc_source.config_list:
+            value = getattr(self.doc_source, key, None)
+            if value:
+                provider_data[key] = value
+            
+        print("Provider data being sent:", provider_data)
+        
+            
+        self._save_docsource(provider_data)
         self.load_docsources()
         self.toggle_doc_source_modal()
 
-    def _save_docsource(self):
+    def _save_docsource(self, provider_data=None):
         print("Saving this doc source config: ", self.doc_source.dict())
         result = self._agentsvc.attach_docsource_to_index(
             self.user.tenant_id,
@@ -217,8 +232,9 @@ class RAGIndexState(AgentsCommonState):
             self.index_id,
             self.doc_source.factory_id,
             self.doc_source.name,
-            self.doc_source.folder_ids.split(","),
-            self.doc_source.file_patterns.split(","),
+            self.doc_source.folder_ids.split(",") if self.doc_source.folder_ids else [],
+            self.doc_source.file_patterns.split(",") if self.doc_source.file_patterns else [],
+            provider_data
         )
         self.doc_source.id = result["id"]
 
@@ -244,7 +260,8 @@ class RAGIndexState(AgentsCommonState):
     def oauth_authorize(self):
         print("Authorizing OAuth for doc source: ", self.doc_source.factory_id)
         # We have to save the doc_source first so we know it's ID
-        self._save_docsource()
+        # For OAuth sources, we don't need provider_data initially
+        self._save_docsource({})  # Pass empty dict as provider_data
         self.authorize_url = self._agentsvc.get_docsource_authorize_url(
             self.user.tenant_id,
             self.index_id, 

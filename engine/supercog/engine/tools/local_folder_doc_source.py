@@ -23,7 +23,7 @@ Local documents from a local folder
 
         )
 
-    def get_documents(self, folder_id: str) -> AsyncGenerator[str, None]:
+    def get_documents(self, folder_id: str, **kwargs) -> AsyncGenerator[str, None]:
         """ Yields a list of documents from the indicated folder. """
         folder_path = self.credentials.get("local_folder")
         for file in os.listdir(folder_path):

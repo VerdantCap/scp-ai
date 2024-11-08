@@ -394,33 +394,43 @@ def agent_settings() -> rx.Component:
             rx.chakra.heading("Settings", size="sm"),
             rx.chakra.accordion_icon(),
         ),
-        content=rx.chakra.hstack(
-            rx.chakra.vstack(
-                rx.chakra.text("Model", color="#888"),
-                rx.chakra.select(
-                    EditorState.avail_models, 
-                    value=EditorState.run_model,
-                    on_change=lambda val: EditorState.change_model(val)
+        content=rx.chakra.vstack(
+            rx.chakra.hstack(
+                rx.chakra.vstack(
+                    rx.chakra.text("Model", color="#888"),
+                    rx.chakra.select(
+                        EditorState.avail_models, 
+                        value=EditorState.run_model,
+                        on_change=lambda val: EditorState.change_model(val)
+                    ),
                 ),
+                rx.chakra.vstack(
+                    rx.chakra.text("Temperature"),
+                    rx.chakra.input(
+                        value=EditorState.app.temperature,
+                        on_change=lambda val: EditorState.set_app_value("temperature", val),
+                    ),
+                ),
+                rx.chakra.vstack(
+                    rx.chakra.text("Max Exec Time"),
+                    rx.chakra.number_input(
+                        value=EditorState.app.max_agent_time,
+                        on_change=lambda val: EditorState.set_app_value("max_agent_time", val),
+                    ),
+                ),
+                align_items="stretch",
+                height="80px",
+                overflow="scroll",
             ),
-            rx.chakra.vstack(
-                rx.chakra.text("Temperature"),
+            rx.chakra.hstack(
+                rx.chakra.text("Indexes:"),
                 rx.chakra.input(
-                    value=EditorState.app.temperature,
-                    on_change=lambda val: EditorState.set_app_value("temperature", val),
+                    value=EditorState.app.index_list,
+                    on_change=lambda val: EditorState.set_app_value("index_list", val),
                 ),
+                width="100%",
             ),
-            rx.chakra.vstack(
-                rx.chakra.text("Max Exec Time"),
-                rx.chakra.number_input(
-                    value=EditorState.app.max_agent_time,
-                    on_change=lambda val: EditorState.set_app_value("max_agent_time", val),
-                ),
-            ),
-            align_items="stretch",
-            height="80px",
-            overflow="scroll",
-        )
+        ),
     )
 
 def tool_row(tool: UITool) -> rx.Component:

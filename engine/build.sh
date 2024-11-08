@@ -1,4 +1,4 @@
-source ~/envs/local.env
+source ../.env
 if [ -f "Dockerfile" ]; then
     DOCKERFILE="Dockerfile"
     CONTEXT=".."

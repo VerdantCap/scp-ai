@@ -50,10 +50,10 @@ Interact with PDF files: read, write content, index PDFs, and perform hybrid sea
 
     def get_tools(self) -> list[Callable]:
         return self.wrap_tool_functions([
-            self.read_pdf_into_index,
+            #self.read_pdf_into_index,
             self.read_pdf,
             self.save_pdf_file,
-            self.hybrid_search,
+#            self.hybrid_search,
             self.convert_pdf_to_images,
         ])
 
@@ -88,71 +88,71 @@ Interact with PDF files: read, write content, index PDFs, and perform hybrid sea
         except Exception as e:
             return f"Error reading PDF: {str(e)}"
 
-    def read_pdf_into_index(self, file_name: str) -> str:
-        """
-        Reads a PDF file, extracts text from all pages, and indexes the content.
+    # def read_pdf_into_index(self, file_name: str) -> str:
+    #     """
+    #     Reads a PDF file, extracts text from all pages, and indexes the content.
 
-        Args:
-            file_name (str): The name of the PDF file in S3.
+    #     Args:
+    #         file_name (str): The name of the PDF file in S3.
 
-        Returns:
-            str: The extracted text from all pages of the PDF and indexing result.
-        """
-        try:
-            tenant_id = self.run_context.tenant_id
-            folder_name = self.run_context.user_id
-            s3_client = get_boto_client('s3')
-            bucket_name = config.get_global("S3_FILES_BUCKET_NAME")
-            object_name = f"{tenant_id}/{folder_name}/{file_name}"
+    #     Returns:
+    #         str: The extracted text from all pages of the PDF and indexing result.
+    #     """
+    #     try:
+    #         tenant_id = self.run_context.tenant_id
+    #         folder_name = self.run_context.user_id
+    #         s3_client = get_boto_client('s3')
+    #         bucket_name = config.get_global("S3_FILES_BUCKET_NAME")
+    #         object_name = f"{tenant_id}/{folder_name}/{file_name}"
 
-            response = s3_client.get_object(Bucket=bucket_name, Key=object_name)
-            pdf_content = response['Body'].read()
+    #         response = s3_client.get_object(Bucket=bucket_name, Key=object_name)
+    #         pdf_content = response['Body'].read()
 
-            pdf_reader = PdfReader(io.BytesIO(pdf_content))
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
+    #         pdf_reader = PdfReader(io.BytesIO(pdf_content))
+    #         text = ""
+    #         for page in pdf_reader.pages:
+    #             text += page.extract_text() + "\n"
             
-            download_url: dict = self.run_context.get_file_url(file_name)
+    #         download_url: dict = self.run_context.get_file_url(file_name)
             
-            # Index the PDF content
-            indexing_result = self._index_pdf_content(text, file_name)
+    #         # Index the PDF content
+    #         indexing_result = self._index_pdf_content(text, file_name)
             
-            result = f"PDF Content (Download link: {download_url.get('url', '')})\n\n{text}\n\n{indexing_result}"
-            return LLMFullResult(result)
-        except Exception as e:
-            return f"Error reading and indexing PDF: {str(e)}"
+    #         result = f"PDF Content (Download link: {download_url.get('url', '')})\n\n{text}\n\n{indexing_result}"
+    #         return LLMFullResult(result)
+    #     except Exception as e:
+    #         return f"Error reading and indexing PDF: {str(e)}"
 
-    def _index_pdf_content(self, text: str, file_name: str) -> str:
-        try:
-            # Split the text into chunks
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
-                length_function=len,
-                separators=["\n\n", "\n", " ", ""]
-            )
-            chunks = text_splitter.split_text(text)
+    # def _index_pdf_content(self, text: str, file_name: str) -> str:
+    #     try:
+    #         # Split the text into chunks
+    #         text_splitter = RecursiveCharacterTextSplitter(
+    #             chunk_size=1000,
+    #             chunk_overlap=200,
+    #             length_function=len,
+    #             separators=["\n\n", "\n", " ", ""]
+    #         )
+    #         chunks = text_splitter.split_text(text)
 
-            # Index the chunks
-            self._setup_database()
-            embedding_table_name = self._get_safe_table_name(self.run_context.tenant_id)
+    #         # Index the chunks
+    #         self._setup_database()
+    #         embedding_table_name = self._get_safe_table_name(self.run_context.tenant_id)
 
-            with self.conn.cursor() as cur:
-                for i, chunk in enumerate(chunks):
-                    embedding = self.embeddings.embed_query(chunk)
-                    cur.execute(sql.SQL("""
-                    INSERT INTO {} (content, source, page_number, embedding)
-                    VALUES (%s, %s, %s, %s::vector)
-                    """).format(sql.Identifier(embedding_table_name)), (chunk, file_name, i, embedding))
+    #         with self.conn.cursor() as cur:
+    #             for i, chunk in enumerate(chunks):
+    #                 embedding = self.embeddings.embed_query(chunk)
+    #                 cur.execute(sql.SQL("""
+    #                 INSERT INTO {} (content, source, page_number, embedding)
+    #                 VALUES (%s, %s, %s, %s::vector)
+    #                 """).format(sql.Identifier(embedding_table_name)), (chunk, file_name, i, embedding))
 
-            self.conn.commit()
+    #         self.conn.commit()
 
-            return f"Successfully indexed {len(chunks)} chunks from {file_name}"
-        except Exception as e:
-            if self.conn:
-                self.conn.rollback()
-            return f"Error indexing PDF content: {str(e)}"
+    #         return f"Successfully indexed {len(chunks)} chunks from {file_name}"
+    #     except Exception as e:
+    #         if self.conn:
+    #             self.conn.rollback()
+    #         return f"Error indexing PDF content: {str(e)}"
 
     def save_pdf_file(self, content: str, filename: str = None, source_format: str="markdown"):
         """ 
@@ -194,9 +194,6 @@ Interact with PDF files: read, write content, index PDFs, and perform hybrid sea
                 text = ""
                 for page in pdf_reader.pages:
                     text += page.extract_text() + "\n"
-
-            # Index the PDF content
-            #indexing_result = self._index_pdf_content(text, filename)
 
             result = f"PDF file saved, download link: {download_url.get('url', '')}"
             return result
@@ -265,39 +262,39 @@ Interact with PDF files: read, write content, index PDFs, and perform hybrid sea
                 self.conn.rollback()
             raise Exception(f"Error setting up database: {str(e)}")
 
-    async def hybrid_search(self, query: str, num_results: int = 5) -> dict:
-        """
-        Performs a hybrid search combining semantic and keyword search, with re-ranking.
-        """
-        try:
-            self._setup_database()
+    # async def hybrid_search(self, query: str, num_results: int = 5) -> dict:
+    #     """
+    #     Performs a hybrid search combining semantic and keyword search, with re-ranking.
+    #     """
+    #     try:
+    #         self._setup_database()
             
-            # Perform semantic search
-            semantic_results = self._semantic_search(query, num_results)
+    #         # Perform semantic search
+    #         semantic_results = self._semantic_search(query, num_results)
             
-            # Perform keyword search
-            keyword_results = await self._keyword_search(query, num_results)
+    #         # Perform keyword search
+    #         keyword_results = await self._keyword_search(query, num_results)
             
-            # Combine and deduplicate results
-            combined_results = list(set(semantic_results + keyword_results))
+    #         # Combine and deduplicate results
+    #         combined_results = list(set(semantic_results + keyword_results))
             
-            # Re-rank results
-            reranked_results = await self._rerank(query, combined_results)
+    #         # Re-rank results
+    #         reranked_results = await self._rerank(query, combined_results)
             
-            output = []
-            for content, source, _, score in reranked_results[:num_results]:
-                filename = self._extract_filename(source)
-                output.append({
-                    "filename": filename,
-                    "similarity": score,
-                    "chunk": content,
-                    "reference": f"{source}"
-                })
+    #         output = []
+    #         for content, source, _, score in reranked_results[:num_results]:
+    #             filename = self._extract_filename(source)
+    #             output.append({
+    #                 "filename": filename,
+    #                 "similarity": score,
+    #                 "chunk": content,
+    #                 "reference": f"{source}"
+    #             })
 
-            return {"status": "success", "results": output}
-        except Exception as e:
-            self.conn.rollback()
-            return {"status": "error", "message": f"Error performing hybrid search: {str(e)}"}
+    #         return {"status": "success", "results": output}
+    #     except Exception as e:
+    #         self.conn.rollback()
+    #         return {"status": "error", "message": f"Error performing hybrid search: {str(e)}"}
 
     def _semantic_search(self, query: str, num_results: int) -> List[Tuple[str, str, int, float]]:
         query_embedding = self.embeddings.embed_query(query)

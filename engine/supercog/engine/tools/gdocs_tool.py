@@ -29,8 +29,22 @@ from .gmail_tool import GAuthCommon
 #SCOPES = config.get_global("GSUITE_SCOPES").split(",")
 
 SCOPES = [
-    'https://www.googleapis.com/auth/documents',
-    'https://www.googleapis.com/auth/drive.readonly',
+    # https://developers.google.com/docs/api/auth
+    # https://developers.google.com/drive/api/guides/api-specific-auth
+    #
+    # This is the magic scope that allows us access to files and folders shared explicitly with our app by
+    # the user. We think Google will allow this scope to be approved. The trick with this scope is that
+    # docs have to be shared explicitly by using the FilePicker API
+    'https://www.googleapis.com/auth/drive.file', 
+
+    # This is the "see all" scope which Google will not approve without a fight, althugh somehow it is listed
+    # as only "Sensitive" as opposed to Restricted.
+    #'https://www.googleapis.com/auth/documents',
+
+    # This one is labeled "Restricted" which is the most severe:
+    # 'https://www.googleapis.com/auth/drive.readonly',
+
+    # These are mostly pro-forma but we should determine if we need these or not
     'https://www.googleapis.com/auth/userinfo.email',
     'openid',
 ]

@@ -7,14 +7,11 @@ import time
 from typing import (
     Dict, Any, List, Generator, Optional, AsyncGenerator, Callable, Sequence,
     Awaitable,
-    Coroutine,
 )
 import os
 import sys
 import traceback
-import mimetypes
 from uuid import uuid4
-from h11 import Data
 
 from openai import OpenAI
 import pandas as pd
@@ -78,7 +75,7 @@ from supercog.shared.apubsub import (
     AssetTypeEnum,
 )
 
-from supercog.shared.models import AgentBase, ToolBase
+from supercog.shared.models import AgentBase, ToolBase, DocIndexReference
 from .db import Credential, session_context, Run
 from .tools.utils import async_logging_client
 
@@ -222,6 +219,8 @@ class ChatEngine(BaseCallbackHandler):
         self.pending_agent_updates = []
         self.max_history: int|None = None
         self.history_compression_manager = HistoryCompressionManager()
+        # The set of RAG indexes enabled for this agent
+        self.doc_indexes: list[DocIndexReference] = []
 
 
     def reset(self):
@@ -263,6 +262,7 @@ class ChatEngine(BaseCallbackHandler):
         secret_list = secrets_service.list_credentials(tenant_id, user_id, "ENV:", include_values=True)
         secrets = {k[4:]: v for k, v in secret_list}
         self.run_tools = [ToolBase(**d) for d in run_tools]
+        self.doc_indexes = agent.get_enabled_indexes()
 
         self.run_context = RunContext(
             ContextInit(
@@ -276,6 +276,7 @@ class ChatEngine(BaseCallbackHandler):
                 enabled_tools={},
                 user_email=user_email,
                 run_scope=run_scope,
+                doc_indexes=self.doc_indexes,
             )
         )
 
@@ -517,25 +518,14 @@ class ChatEngine(BaseCallbackHandler):
             msg += "\n===========\n"
             # Because of this below we are connecting to the db on every Agent prompt... so we should probably
             # just create a db connection to wrap the whole "respond" call
-            with session_context() as session:
-                indexes = self._get_available_doc_indexes(session)
-                if len(indexes) > 0:
-                    msg += "==== Current Knowledge Indices ===\n"
-                    for index in indexes:
-                        msg += f"📚 {index.name} ({index.source_description}) \n"
-                    msg += "\n===========\n"
+            if len(self.doc_indexes) > 0:
+                msg += "==== Current Knowledge Indices ===\n"
+                for index in self.doc_indexes:
+                    msg += f"📚 {index.name} \n"
+                msg += "\n===========\n"
             return [HumanMessage(content=msg)]
         else:
             return []
-
-    def _get_available_doc_indexes(self, session):
-        return get_available_indexes(
-            session=session, 
-            user=self.run_context.get_user_object(), 
-            include_private= not self.run_context.run_is_shared(),
-            include_shared=True,
-        )
-
 
     def get_datetime_message(self, user_timezone: Optional[str] = None) -> str:
         # Get the current UTC datetime 
@@ -891,11 +881,9 @@ class ChatEngine(BaseCallbackHandler):
             res = f"User: {user}\n"
 
         elif cmd == "{indexes}":
-            with session_context() as session:
-                indexes = self._get_available_doc_indexes(session)
-                res = "Available indexes:\n\n"
-                for index in indexes:
-                    res += f"**{index.name}** ({index.source_description})\n\n"
+            res = "Available indexes:\n\n"
+            for index in self.doc_indexes:
+                res += f"**{index.name}**\n\n"
 
         if res:
             yield AgentOutputEvent(**(meta | {"str_result":res}))

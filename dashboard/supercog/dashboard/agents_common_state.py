@@ -159,7 +159,10 @@ class AgentsCommonState(GlobalState):
 
         if made_creds:
             self.load_connections(force=True)
-        
+
+        if agent.enabled_indexes is None:
+            agent.enabled_indexes = "[]"
+
         self._agentsvc.save_agent(agent)
         return agent
 

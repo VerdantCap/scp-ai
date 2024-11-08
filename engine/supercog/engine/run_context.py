@@ -26,6 +26,7 @@ from supercog.shared.apubsub import (
     AssetCreatedEvent,
     AssetTypeEnum,
 )
+from supercog.shared.models import DocIndexReference
 
 from .db import session_context, Agent, Run, DocIndex
 from .jwt_auth import User as JWTUser
@@ -51,6 +52,7 @@ ContextInit = namedtuple("ContextInit", [
     "enabled_tools",          # Dict of factory_id>tool_names for tools enabled on the agent
     "user_email",
     "run_scope",
+    "doc_indexes",
 ])
 
 LangChainCallback = AsyncCallbackManager
@@ -81,6 +83,7 @@ class RunContext:
         self.asset_contents = {}
         # The scope of this run, inherited from the agent, "private" or "shared"
         self.run_scope = opts.run_scope
+        self.doc_indexes: list[DocIndexReference] = opts.doc_indexes
 
     @classmethod
     def create_squib_context(cls, tenant_id: str, user_id: str, secrets: dict):
@@ -96,6 +99,7 @@ class RunContext:
                 enabled_tools={},
                 user_email="",
                 run_scope="private",
+                doc_indexes=[],
             )
         )
 
@@ -252,6 +256,17 @@ class RunContext:
     def get_env_var(self, var_name: str) -> str:
         return self.secrets.get(var_name)
 
+    def get_doc_indexes(self) -> list[DocIndexReference]:
+        # Returns the RAG indexes activate for the current Agent/Run
+        return self.doc_indexes
+
+    def find_doc_index_by_name(self, index_name: str) -> DocIndexReference|None:
+        for index in self.doc_indexes:
+            # not sure if we will need or want something more fuzzy
+            if index.name.lower() == index_name.lower():
+                return index
+        return None
+        
     def create_agent_directory(self) -> str:
         """
         Create and return the path to an agent-specific directory.
@@ -470,5 +485,6 @@ class RunContext:
                 enabled_tools=[],
                 user_email="none",
                 run_scope="private",
+                doc_indexes=[]
             )
         )

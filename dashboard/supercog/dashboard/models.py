@@ -21,7 +21,7 @@ from sqlmodel import (
 from sqlalchemy import or_, not_
 from sqlalchemy.sql.expression import func
 
-from supercog.shared.models import AgentCore, get_uuid4
+from supercog.shared.models import AgentCore, get_uuid4, DocIndexReference
 from supercog.shared.utils import upload_bytes_to_s3, sanitize_string
 
 from slack_sdk.oauth.installation_store import Installation
@@ -467,6 +467,7 @@ class Agent(AgentCore, table=True):
             self, 
             agent_state: Any,
             folder_id: str, 
+            doc_indexes: list["UIDocIndex"],
         ):
         from .state_models import AgentState
 
@@ -484,6 +485,7 @@ class Agent(AgentCore, table=True):
                            'is_folder_header',
                            'folder_icon_tag',
                            'help_message',
+                           'index_list',
                            'agent_email']:
                 if key == "prompts":
                     self.prompts_json = json.dumps(value)
@@ -491,7 +493,18 @@ class Agent(AgentCore, table=True):
                     setattr(self, key, float(value))
                 else:
                     setattr(self, key, value)
-                    
+
+        print("Saving agent, current doc indexes are: ", [d.dict() for d in doc_indexes])
+        index_names = [i.strip() for i in astate.index_list.split(",")]
+        enabled = []
+        for index in index_names:
+            for doc_index in doc_indexes:
+                if doc_index.name == index:
+                    enabled.append(DocIndexReference(name = index, index_id=doc_index.id))
+                    continue
+        self.enabled_indexes = json.dumps([ref.dict() for ref in enabled])
+        astate.index_list = ",".join([i.name for i in enabled]) #push back to UI model in case an index wasnt found
+
         self.folder_id = folder_id
         self.updated_at = datetime.now(timezone.utc)
         self.make_agent_slug()

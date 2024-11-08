@@ -12,7 +12,7 @@ from sqlmodel import Session, select, and_
 import reflex as rx
 
 from supercog.shared.apubsub import AgentEndEvent, AgentEvent, AgentOutputEvent, EventRegistry, pubsub
-from supercog.shared.models import RunLogBase
+from supercog.shared.models import RunLogBase, PERSONAL_INDEX_NAME
 from supercog.shared.services import config
 
 from supercog.dashboard.models import Agent, Folder, SlackInstallation, Tenant, User, Tool
@@ -94,12 +94,19 @@ class ChatManager:
             )
             return
 
-        if files and len(files) > 0:
-            user_message = await self.upload_slack_files_to_s3(agentsvc=agentsvc, client=client, files=files, user_message=user_message)
-
         if conversation_id in self.runs:
             slack_logger.debug(f"Continue existing Run from convo {conversation_id}")
             run = self.runs[conversation_id]
+            if files and len(files) > 0:
+                user_message = await self.upload_slack_files_to_s3(
+                    agentsvc=agentsvc, 
+                    client=client, 
+                    files=files, 
+                    user_message=user_message,
+                    index_files=True,
+                    run_id=run['id'],
+                )
+
             async for event in self.wait_for_agent_reply(
                 agentsvc,
                 run['id'],
@@ -120,7 +127,6 @@ class ChatManager:
                     session,
                     client,
                 )
-
                 if agent is None:
                     raise RuntimeError(f"No agent created for Slack User {slack_user_id}")
                 run = agentsvc.create_run(
@@ -131,6 +137,17 @@ class ChatManager:
                     conversation_id=conversation_id,
                 )
                 self.runs[conversation_id] = run
+
+                if files and len(files) > 0:
+                    user_message = await self.upload_slack_files_to_s3(
+                        agentsvc=agentsvc, 
+                        client=client, 
+                        files=files, 
+                        user_message=user_message,
+                        index_files=True,
+                        run_id=run['id'],
+                    )
+
                 async for event in self.wait_for_agent_reply(
                     agentsvc,
                     run['id'],
@@ -210,9 +227,20 @@ class ChatManager:
         else:
             raise Exception(f"Failed to download file: {download_response.status_code}")
 
-    async def upload_slack_files_to_s3(self, agentsvc: EngineClient, client: AsyncWebClient, files: list[dict], user_message: str) -> str:
+    async def upload_slack_files_to_s3(
+            self, 
+            agentsvc: EngineClient, 
+            client: AsyncWebClient, 
+            files: list[dict], 
+            user_message: str,
+            index_files: bool=False,
+            run_id: str|None=None,
+        ) -> str:
         # FIXME: At a minimum we should be able to use S3 CopyObject to copy from Slack bucket to our bucket. This would work
         # by support "file_upload_by_url" on the Agentsvc.
+
+        # Pass index_files=True to add files to the default RAG index of the Agent which you must specify via
+        # run_id.
         for file_info in files:
             try:
                 # Download file from Slack
@@ -225,7 +253,9 @@ class ChatManager:
                     "uploads",
                     filename,
                     file_content,
-                    content_type
+                    content_type,
+                    index_file=index_files,
+                    run_id=run_id,
                 )
 
                 slack_logger.debug(f"Successfully uploaded slack file {filename}")
@@ -308,13 +338,23 @@ class ChatManager:
                 if not channel_name:
                     channel_name = await self.get_channel_name(client, channel_info.channel_id)
 
+                agent_name = channel_name or channel_info.channel_id
+
+                index = agentsvc.create_doc_index(
+                    tenant.id,
+                    install_user.id, # so the index is editable by the install owner
+                    index_name=agent_name,
+                    scope="shared",
+                )
                 agent = await self._create_slack_agent(
                     agent_id, 
                     tenant.id, 
                     install_user.id, 
-                    channel_name or channel_info.channel_id,
+                    agent_name,
                     folder.id,
-                    session,
+                    index_name=index['name'],
+                    index_id=index['id'],
+                    session=session,
                     scope="shared",
                 )
                 # A little strange cause the Agentsvc will have the "fake" Slack credentials, but we are saving an agent
@@ -327,18 +367,37 @@ class ChatManager:
             slack_logger.debug(f"Looking for Slack agent with id: {agent_id}")
             agent = session.get(Agent, agent_id)
             if agent is None:
+                index = agentsvc.create_doc_index(
+                    agentsvc.tenant_id,
+                    agentsvc.user_id,
+                    index_name=PERSONAL_INDEX_NAME,
+                    scope="private",
+                )
                 agent = await self._create_slack_agent(
                     agent_id, 
                     agentsvc.tenant_id, 
                     agentsvc.user_id, 
                     config.SPECIAL_AGENT_SLACK_PRIVATE,
                     None,
-                    session,
+                    index_name=index['name'],
+                    index_id=index['id'],
+                    session=session,
                 )
                 agentsvc.save_agent(agent)
             return agent
 
-    async def _create_slack_agent(self, agent_id, tenant_id, user_id, name, folder_id, session, scope: str = "private") -> Agent:
+    async def _create_slack_agent(
+            self, 
+            agent_id, 
+            tenant_id, 
+            user_id, 
+            name, 
+            folder_id, 
+            index_name,
+            index_id,
+            session, 
+            scope: str = "private"
+        ) -> Agent:
         md_path = os.path.join(SYSTEM_AGENTS_DIR, "14_slack_agent.md")
         markdown_agent = open(md_path, "r").read()
         # FIXME: Would be safer to load tool factories from the Agentsvc in case our template
@@ -371,6 +430,7 @@ class ChatManager:
             updated_at=None,
             scope=scope,
         )
+        agent.enable_rag_index(index_name, index_id)
         session.add(agent)
         session.commit()
         session.refresh(agent)

@@ -31,6 +31,8 @@ if [ "$#" -ge 1 ]; then
         $BASECMD reflex db migrate   
     elif [ "$1" == "makemigrations" ]; then
         $BASECMD reflex db makemigrations
+    elif [ "$1" == "alembic" ]; then
+        $BASECMD alembic $2
     elif [ "$1" == "debug" ]; then
         $BASECMD reflex run --loglevel=debug
     elif [ "$1" == "docker" ]; then

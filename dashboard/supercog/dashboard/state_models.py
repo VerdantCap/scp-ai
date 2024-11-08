@@ -254,6 +254,7 @@ class AgentState(rx.Base):
     temperature: str = "0"
     max_agent_time: int = 600
     help_message: str|None = ""
+    index_list: str = "" # Enabled index names, comma separated
 
     # In the UI we just keep tools as a list of Tool Factory names
     tools: list[str] = []
@@ -316,6 +317,7 @@ class AgentState(rx.Base):
                 is_folder_header=False,  # Regular agents are not folder headers
                 folder_icon_tag="folder-tree" if agent.scope == "shared" else "folder",
                 help_message=help_message or agent.welcome_message or "",
+                index_list=",".join([i.name for i in agent.get_enabled_indexes()]),
             )
             #print(f"folder name = {folder_name} folder tag = {result.folder_icon_tag}")
             result.lookup_user(session)

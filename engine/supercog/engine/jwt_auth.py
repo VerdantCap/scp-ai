@@ -10,6 +10,8 @@ from cryptography.hazmat.backends import default_backend
 import base64
 
 from supercog.shared.services import config
+from supercog.shared.models import DocIndexBase
+
 from .triggerable import TRIGGER_PASSKEY
 
 security = HTTPBearer()
@@ -22,7 +24,7 @@ class User(BaseModel):
     timezone: Optional[str] = None
 
     def personal_index_id(self):
-        return f"personal_{self.user_id[0:14]}_{self.tenant_id[0:14]}"
+        return DocIndexBase.calc_user_personal_index_id(self.user_id, self.tenant_id)
     
 def get_public_key():
     public_key_pem = config.get_global("DASH_PUBLIC_KEY")

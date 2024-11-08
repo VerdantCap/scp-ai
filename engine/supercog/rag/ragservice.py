@@ -69,6 +69,7 @@ async def start_indexing(
             enabled_tools = {},
             user_email = None,
             run_scope="private",
+            doc_indexes=[],
         )
     )
     # Fetch and process documents

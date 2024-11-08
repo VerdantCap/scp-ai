@@ -22,7 +22,16 @@ from supercog.shared.models import get_uuid4
 from supercog.shared.credentials import secrets_service, reset_secrets_connection
 from supercog.shared.logging import logger
 from supercog.shared.apubsub import AgentEvent
-from supercog.shared.models import AgentBase, RunCreate, CredentialBase, get_uuid4, RunLogBase, DocIndexBase, ToolBase
+from supercog.shared.models import (
+    AgentBase, 
+    RunCreate, 
+    CredentialBase, 
+    get_uuid4, 
+    RunLogBase, 
+    DocIndexBase, 
+    ToolBase,
+    DocIndexReference,
+)
 
 SERVICE_NAME = "engine"
 engine: Engine =  None
@@ -99,6 +108,11 @@ class Agent(AgentBase, table=True):
 
         One notable difference is that our "tools" are just a JSON blob rather
         than the separate models that the Dashboard keeps.
+
+        We also keep enabled_indexes as a JSON blob. The only real reason to do this
+        (versus just using a normal db relationship) is so that we can serialize an 
+        agent on the Dashboard side into a singular file. If we only kept table IDs
+        then we couldn't really export/import an agent and preserve index references.
     """
     __tablename__ = "agents"
 
@@ -106,7 +120,6 @@ class Agent(AgentBase, table=True):
 
     def get_agent_email_address(self) -> str:
         return f"{self.agent_slug}@mail.supercog.ai"
-
 
 # CredentialBase is in shared so we can use it as our service contract
 class Credential(CredentialBase, table=True):
