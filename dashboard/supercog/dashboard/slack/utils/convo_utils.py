@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 import requests
 from slack_sdk.web.async_client import AsyncWebClient
+from slack_bolt.async_app import AsyncBoltContext
 
 from supercog.shared.services import config
 
@@ -135,3 +136,57 @@ msg_accessory = {
     }
 }
 
+async def post_link_to_reply_in_channel(
+    client: AsyncWebClient,
+    context: AsyncBoltContext,
+    channel_id: str,
+    logger: Logger,
+    thread_ts: str,
+    message_ts: str,
+) -> str:
+    try:
+        # Get up to 5 messages in the thread, exclude the one we just posted
+        conversation_replies_result = await client.conversations_replies(
+            channel=channel_id,
+            ts=thread_ts,
+            inclusive=False,
+            latest=message_ts,
+            limit=5
+        )
+        # If there already was a message from out bot do not post in the channel again
+        for message in conversation_replies_result.get("messages", []):
+            if message.get("bot_id") == context.bot_id:
+                return message_ts
+
+        link_to_message_result = await client.chat_getPermalink(channel=channel_id, message_ts=message_ts)
+        permalink = link_to_message_result.get("permalink")
+        link_blocks = [{
+            "type": "rich_text",
+            "elements": [{
+                "type": "rich_text_section",
+                "elements": [
+                    {
+                        "type": "text",
+                        "text": "Check out my response in the thread "
+                    },
+                    {
+                        "type": "link",
+                        "url": permalink,
+                        "text": "here"
+                    },
+                    {
+                        "type": "text",
+                        "text": "."
+                    },
+                ]
+            }]
+        }]
+        if link_to_message_result.get("permalink") is not None:
+            await client.chat_postMessage(
+                channel=channel_id,
+                text=permalink,
+                blocks=link_blocks,
+            )
+
+    except Exception as e:
+        logger.error("Could not message in public channel for response in thread")

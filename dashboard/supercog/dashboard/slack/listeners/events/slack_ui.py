@@ -1,6 +1,7 @@
 import re
+from typing import Literal
 
-def inline_markdown_to_rich_text(line: str):
+def inline_markdown_to_rich_text(line: str, is_list_or_quote: bool = False):
     # Define inline formatting patterns with capturing groups
     patterns = [
         (r'\*\*\*(.+?)\*\*\*', {"bold": True, "italic": True}), # Bold & Italic
@@ -56,9 +57,113 @@ def inline_markdown_to_rich_text(line: str):
                 "type": "text",
                 "text": token[0]  # Token is plain text (no format)
             })
-
+        
+    if len(elements) == 0:
+        elements.append({
+            "type": "text",
+            "text": ""
+        })
+        
+    # Add \n\n to the last element of the line
+    if not is_list_or_quote:
+        elements[-1]["text"] += "\n\n"
+    
     return elements
 
+def list_markdown_to_rich_text(slack_blocks: list, line: str, list_type: Literal["bullet", "ordered"]):
+    # If the top level list is ordered use indent of 3, otherwise 2
+    indent_break = 2
+    if (len(slack_blocks) > 0 and
+        slack_blocks[-1].get("type") == "rich_text" and
+        len(slack_blocks[-1]["elements"]) > 0 and
+        slack_blocks[-1]["elements"][-1].get("style", "") == "ordered"):
+        indent_break = 3
+
+    indent_level = int((len(line) - len(line.lstrip())) / indent_break)
+
+    list_item = line.lstrip().split(' ', 1)[1].strip()  # Remove leading `-`, `*`, or number
+    elements = inline_markdown_to_rich_text(list_item, True)
+    rich_text_list_element = {
+        "type": "rich_text_section",
+        "elements": elements
+    }
+    rich_text_element = {
+        "type": "rich_text_list",
+        "style": list_type,
+        "indent": indent_level,
+        "elements": [rich_text_list_element],
+    }
+    
+    # If there is no rich_text block create one
+    if len(slack_blocks) == 0 or slack_blocks[-1].get("type") != "rich_text":
+        slack_blocks.append({
+            "type": "rich_text",
+            "elements": [rich_text_element],
+        })
+    # If there are no rich_text elements
+    elif len(slack_blocks[-1]["elements"]) == 0:
+        slack_blocks[-1]["elements"] = [rich_text_element]
+    # If there is no rich_text_list as the most recent element
+    elif slack_blocks[-1]["elements"][-1].get("type") != "rich_text_list":
+        slack_blocks[-1]["elements"].append(rich_text_element)
+    # If the most recent rich_text_list indentation does not match
+    elif slack_blocks[-1]["elements"][-1].get("indent", 0) != indent_level:
+        slack_blocks[-1]["elements"].append(rich_text_element)
+    # If the most recent rich_text_list style does not match
+    elif slack_blocks[-1]["elements"][-1].get("style") != list_type:
+        # Need an extra block between them
+        slack_blocks[-1]["elements"].append({
+            "type": "rich_text_section",
+            "elements": [{
+                "type": "text",
+                "text": "\n"
+            }],
+        })
+        slack_blocks[-1]["elements"].append(rich_text_element)
+    # If the most recent rich_text_list has no elements
+    elif len(slack_blocks[-1]["elements"][-1]["elements"]) == 0:
+        slack_blocks[-1]["elements"][-1]["elements"] = [rich_text_list_element]
+    else:
+        slack_blocks[-1]["elements"][-1]["elements"].append(rich_text_list_element)
+
+def blockquote_markdown_to_rich_text(slack_blocks: list, line: str):
+    matches_length = len(re.match(r'^(> )+', line.lstrip()).group())
+    border = 1 if matches_length > 2 else 0
+
+    quote_text = re.sub(r'^(> )+', "", line.lstrip(), 1).strip()
+    elements = inline_markdown_to_rich_text(quote_text, True)
+
+    # Add a \n to the last element's text
+    if len(elements) > 0:
+        elements[-1]["text"] += "\n"
+
+    rich_text_element = {
+        "type": "rich_text_quote",
+        "border": border,
+        "elements": elements
+    }
+
+    # If there is no rich_text block create one
+    if len(slack_blocks) == 0 or slack_blocks[-1].get("type") != "rich_text":
+        slack_blocks.append({
+            "type": "rich_text",
+            "elements": [rich_text_element]
+        })
+    # If there are no rich_text elements
+    elif len(slack_blocks[-1]["elements"]) == 0:
+        slack_blocks[-1]["elements"] = [rich_text_element]
+    # If there is no rich_text_quote as the most recent element
+    elif slack_blocks[-1]["elements"][-1].get("type") != "rich_text_quote":
+        slack_blocks[-1]["elements"].append(rich_text_element)
+    # If the most recent rich_text_quote indentation does not match
+    elif slack_blocks[-1]["elements"][-1].get("border", 0) != border:
+        slack_blocks[-1]["elements"].append(rich_text_element)
+    # If the most recent rich_text_quote has no elements
+    elif len(slack_blocks[-1]["elements"][-1]["elements"]) == 0:
+        slack_blocks[-1]["elements"][-1]["elements"] = elements
+    else:
+        slack_blocks[-1]["elements"][-1]["elements"].extend(elements)
+        
 def markdown_to_slack_rich_text(markdown_text: str):
     """
     Convert Markdown text to Slack rich text format.
@@ -122,95 +227,13 @@ def markdown_to_slack_rich_text(markdown_text: str):
             })
         # Check for unordered lists (start with `-` or `*`)
         elif line.lstrip().startswith(('- ', '* ')):
-            # Add unordered list item
-            list_item = line.lstrip()[1:].strip()  # Remove leading `-` or `*`
-            elements = inline_markdown_to_rich_text(list_item)
-            if len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text":
-                # Check if there is an existing list, if there is add to it
-                if len(slack_blocks[-1]["elements"]) > 0 and slack_blocks[-1]["elements"][-1].get("type") == "rich_text_list" and slack_blocks[-1]["elements"][-1].get("style") == "bullet":
-                    slack_blocks[-1]["elements"][-1]["elements"].append({
-                        "type": "rich_text_section",
-                        "elements": elements
-                    })
-                else:
-                    slack_blocks[-1]["elements"].append({
-                        "type": "rich_text_list",
-                        "style": "bullet",
-                        "elements": [{
-                            "type": "rich_text_section",
-                            "elements": elements
-                        }]
-                    })
-            else:
-                slack_blocks.append({
-                    "type": "rich_text",
-                    "elements": [{
-                        "type": "rich_text_list",
-                        "style": "bullet",
-                        "elements": [{
-                            "type": "rich_text_section",
-                            "elements": elements
-                        }]
-                    }]
-                })
+            list_markdown_to_rich_text(slack_blocks=slack_blocks, line=line, list_type="bullet")
         # Check for ordered lists (lines starting with a number followed by a dot)
         elif re.match(r'^\d+\. ', line.lstrip()):
-            # Add ordered list item
-            list_item = line.lstrip().split(' ', 1)[1].strip()
-            elements = inline_markdown_to_rich_text(list_item)
-            if len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text":
-                # Check if there is an existing list, if there is add to it
-                if len(slack_blocks[-1]["elements"]) > 0 and slack_blocks[-1]["elements"][-1].get("type") == "rich_text_list" and slack_blocks[-1]["elements"][-1].get("style") == "ordered":
-                    slack_blocks[-1]["elements"][-1]["elements"].append({
-                        "type": "rich_text_section",
-                        "elements": elements
-                    })
-                else:
-                    slack_blocks[-1]["elements"].append({
-                        "type": "rich_text_list",
-                        "style": "ordered",
-                        "elements": [{
-                            "type": "rich_text_section",
-                            "elements": elements
-                        }]
-                    })
-            else:
-                slack_blocks.append({
-                    "type": "rich_text",
-                    "elements": [{
-                        "type": "rich_text_list",
-                        "style": "ordered",
-                        "elements": [{
-                            "type": "rich_text_section",
-                            "elements": elements
-                        }]
-                    }]
-                })
-        # Check for blockquotes (lines starting with `>`)
-        elif line.lstrip().startswith('> '):
-            # Add blockquote
-            quote_text = line.lstrip()[1:].strip()
-            elements = inline_markdown_to_rich_text(quote_text)
-            # Add a \n to the last element's text
-            if len(elements) > 0:
-                elements[-1]["text"] += "\n"
-            if len(slack_blocks) > 0 and slack_blocks[-1].get("type") == "rich_text":
-                # Check if there is an existing block quote, if there is add to it
-                if len(slack_blocks[-1]["elements"]) > 0 and slack_blocks[-1]["elements"][-1].get("type") == "rich_text_quote":
-                    slack_blocks[-1]["elements"][-1]["elements"].extend(elements)
-                else:
-                    slack_blocks[-1]["elements"].append({
-                        "type": "rich_text_quote",
-                        "elements": elements
-                    })
-            else:
-                slack_blocks.append({
-                    "type": "rich_text",
-                    "elements": [{
-                        "type": "rich_text_quote",
-                        "elements": elements
-                    }]
-                })
+            list_markdown_to_rich_text(slack_blocks=slack_blocks, line=line, list_type="ordered")
+        # Check for blockquotes (lines starting with `> `)
+        elif re.match(r'^(> )+', line.lstrip()) is not None:
+            blockquote_markdown_to_rich_text(slack_blocks=slack_blocks, line=line)
         # All other lines are treated as rich text
         else:
             # Check if the last block is rich text, if not create a new one
