@@ -1,1 +1,42 @@
+name: CI
 
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.11.10'
+    - name: Build Docker Image
+      run: docker compose up
+      
+    - name: Install Poetry using pip
+      run : pip install poetry
+
+    - name: Install dependencies in engine directory
+      run: |
+        cd engine
+        poetry shell
+        poetry install --no-root
+        ./agents.sh migrate
+        ./agents.sh
+
+    - name: Install dependencies in engine directory
+      run: |
+        cd dashboard
+        poetry shell
+        poetry install --no-root
+        ./dashboard.sh migrate
+        ./dashboard.sh
