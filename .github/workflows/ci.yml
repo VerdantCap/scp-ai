@@ -19,9 +19,6 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.11.10'
-        
-    - name: Copy environment variable
-      run: cp .env.example .env
       
     - name: Build Docker Image
       run: docker compose up -d
