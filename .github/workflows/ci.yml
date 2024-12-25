@@ -19,9 +19,13 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.11.10'
+
+    - name: Set up environment variable and write to .env file
+      run: |
+        echo "SUPERCOG_DATA=${{ variables.SUPERCOG_DATA }}" >> .env
       
     - name: Build Docker Image
-      run: docker compose up --env-file env.example  -d
+      run: docker compose up  -d
       
     - name: Install Poetry using pip
       run: pip install poetry
