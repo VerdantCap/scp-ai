@@ -21,7 +21,7 @@ jobs:
         python-version: '3.11.10'
 
     - name: Set up environment variable and write to .env file
-      run: echo "SUPERCOG_DATA=${{ variables.SUPERCOG_DATA }}" >> .env
+      run: echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
       
     - name: Build Docker Image
       run: docker compose up  -d
