@@ -1,5 +1,5 @@
-# Supercog
-
+# SCp-AI
+Work Diagram(https://app.diagrams.net/#G1UYXfgSpT8V5HZeGn3oL3IP0_4kg-6R00#%7B%22pageId%22%3A%22n1pQsy4G2NWpzBYREIYf%22%7D)
 This is the new Supercog monorepo.
 
 The monolitic Reflex app has been split into multiple pieces, and separate Python packages:
