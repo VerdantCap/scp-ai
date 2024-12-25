@@ -18,6 +18,7 @@ from supercog.dashboard.models import Agent, Tool
 from supercog.dashboard.slack.utils.convo_utils import (
     get_channel_info, 
     msg_accessory,
+    post_link_to_reply_in_channel,
     SlackUploadedFile,
     upload_files_to_slack, 
 )
@@ -63,22 +64,23 @@ async def respond_to_user_message(
         # get channel name and determine if its a public channel (got the code from Claude!)
         channel_info = get_channel_info(payload, team_id)
 
-        await client.assistant_threads_setStatus(
-            channel_id=channel_id,
-            thread_ts=ts,
-            status="is thinking...",
-        )
-
         # Only respond if this is a bot thread
         if not force_message:
-            bot_thread = await has_bot_posted_in_thread(
+            is_bot_thread = await has_bot_posted_in_thread(
                 context=context,
                 client=client,
                 channel_id=channel_id,
                 thread_ts=thread_ts,
             )
-            if not bot_thread:
+            if not is_bot_thread:
                 return
+            
+        # Set to thinking
+        await client.assistant_threads_setStatus(
+            channel_id=channel_id,
+            thread_ts=ts,
+            status="is thinking...",
+        )
 
         slack_logger.debug("Calling the agent and waiting for reply")
         full_reply = ""
@@ -133,7 +135,7 @@ async def respond_to_user_message(
             full_reply += batch
 
         if not chat_manager.sent_ephemeral_message:
-            await update_response(
+            message_ts = await update_response(
                 client=client,
                 logger=logger,
                 uploaded_files=uploaded_files,
@@ -144,13 +146,24 @@ async def respond_to_user_message(
                 is_final=True,
             )
 
+            # Post the preview if in a public channel
+            if channel_info.is_public:
+                await post_link_to_reply_in_channel(
+                    client=client,
+                    context=context,
+                    channel_id=channel_id,
+                    logger=logger,
+                    thread_ts=ts,
+                    message_ts=message_ts,
+                )
+
         slack_logger.debug("Done waiting for the agent reply")
     except Exception as e:
         logger.exception(f"Failed to handle a user message event: {e}")
         await client.chat_postMessage(
             channel=channel_id,
             thread_ts=ts,
-            text=f":warning: Something went wrong! ({e})",
+            text=f":warning: Something went wrong posting to Slack. Please try again!",
         )
 
     await client.assistant_threads_setStatus(
@@ -158,7 +171,6 @@ async def respond_to_user_message(
         thread_ts=ts,
         status="",
     )
-
 
 async def update_response(
         client: AsyncWebClient,

@@ -70,6 +70,6 @@ When the user supplies an email address plus some other identifying information,
         await client.chat_postMessage(
             channel=channel_id,
             thread_ts=thread_ts,
-            text=f":warning: Something went wrong! ({e})",
+            text=f":warning: Something went wrong! Please try again!",
         )
         
