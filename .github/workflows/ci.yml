@@ -28,8 +28,10 @@ jobs:
           echo "MINIO_CONSOLE_PORT_NUMBER=${{ secrets.MINIO_CONSOLE_PORT_NUMBER }}" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "S3_PUBLIC_BUCKET=${{ secrets.S3_PUBLIC_BUCKET }}" >> .env
-          echo "S3_FILES_BUCKET_NAME=${{ secrets.S3_FILES_BUCKET_NAME }}" >> .env 
+          echo "S3_FILES_BUCKET_NAME=${{ secrets.S3_FILES_BUCKET_NAME }}" >> .env
+          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
           echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
+          
       
     - name: Build Docker Image
       run: docker compose up  -d
