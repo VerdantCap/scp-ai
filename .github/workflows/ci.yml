@@ -30,6 +30,8 @@ jobs:
           echo "S3_PUBLIC_BUCKET=${{ secrets.S3_PUBLIC_BUCKET }}" >> .env
           echo "S3_FILES_BUCKET_NAME=${{ secrets.S3_FILES_BUCKET_NAME }}" >> .env
           echo "CREDENTIALS_MASTER_KEY=${{ secrets.CREDENTIALS_MASTER_KEY }}" >> .env
+          echo "DASH_PRIVATE_KEY=${{ secrets.DASH_PRIVATE_KEY }}" >> .env
+          echo "DASH_PUBLIC_KEY=${{ secrets.DASH_PUBLIC_KEY }}" >> .env
           echo "ENV=${{ secrets.ENV }}" >> .env
           echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
           echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
