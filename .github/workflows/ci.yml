@@ -21,7 +21,15 @@ jobs:
         python-version: '3.11.10'
 
     - name: Set up environment variable and write to .env file
-      run: echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
+      run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+          echo "AWS_SECRET_KEY=${{ secrets.AWS_SECRET_KEY }}" >> .env
+          echo "MINIO_API_PORT_NUMBER=${{ secrets.MINIO_API_PORT_NUMBER }}" >> .env
+          echo "MINIO_CONSOLE_PORT_NUMBER=${{ secrets.MINIO_CONSOLE_PORT_NUMBER }}" >> .env
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+          echo "S3_PUBLIC_BUCKET=${{ secrets.S3_PUBLIC_BUCKET }}" >> .env
+          echo "S3_FILES_BUCKET_NAME=${{ secrets.S3_FILES_BUCKET_NAME }}" >> .env 
+          echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
       
     - name: Build Docker Image
       run: docker compose up  -d
