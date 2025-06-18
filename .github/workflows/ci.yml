@@ -29,6 +29,7 @@ jobs:
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "S3_PUBLIC_BUCKET=${{ secrets.S3_PUBLIC_BUCKET }}" >> .env
           echo "S3_FILES_BUCKET_NAME=${{ secrets.S3_FILES_BUCKET_NAME }}" >> .env
+          echo "CREDENTIALS_MASTER_KEY=${{ secrets.CREDENTIALS_MASTER_KEY }}" >> .env
           echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
           echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
           
