@@ -40,7 +40,7 @@ jobs:
     - name: Install dependencies in engine directory
       run: |
         cd engine
-        poetry shell
+        poetry env activate
         poetry install --no-root
         ./agents.sh migrate
         ./agents.sh
@@ -48,7 +48,7 @@ jobs:
     - name: Install dependencies in engine directory
       run: |
         cd dashboard
-        poetry shell
+        poetry env activate
         poetry install --no-root
         ./dashboard.sh migrate
         ./dashboard.sh
