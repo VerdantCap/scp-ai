@@ -32,6 +32,7 @@ jobs:
           echo "CREDENTIALS_MASTER_KEY=${{ secrets.CREDENTIALS_MASTER_KEY }}" >> .env
           echo "DASH_PRIVATE_KEY=${{ secrets.DASH_PRIVATE_KEY }}" >> .env
           echo "DASH_PUBLIC_KEY=${{ secrets.DASH_PUBLIC_KEY }}" >> .env
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
           echo "ENV=${{ secrets.ENV }}" >> .env
           echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
           echo "SUPERCOG_DATA=${{ secrets.SUPERCOG_DATA }}" >> .env
