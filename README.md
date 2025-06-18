@@ -257,15 +257,12 @@ You must create a slack app to tie everything into.
 Socket mode is enabled by default for new apps from the manifest.
 
 1. Make sure your app is set to socket mode in slack
-![Slack Socket Mode On](docs/slack_setup_images/slack_socket_mode_on.png)
 
 2. Navigate to Install App in the sidebar and install it
-![Slack Install App](docs/slack_setup_images/slack_install_app.png)
 
 3. Copy the **Bot User OAuth Token** into `local.env` as `SLACK_AI_BOT_TOKEN`
 4. Navigate to **Basic Information** -> **App-Level Tokens**
 5. Create an app level token with `connections:write` as a scope
-![Slack App Level Token](docs/slack_setup_images/slack_app_level_token.png)
 
 5. Copy the token value and add it to `local.env` as `SLACK_AI_APP_TOKEN`
 6. Make sure you comment out `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` in `local.env`
@@ -275,14 +272,11 @@ chmod +x ./scripts/create_socket_mode_installation.sh
 ./scripts/create_socket_mode_installation.sh ${user_email} ${slack_user_id}
 ```
   - You can find your slack_user_id in Slack -> Profile -> three dots menu -> Copy Member ID
-    ![Slack User Id](docs/slack_setup_images/slack_user_id.png)
 
 ### To run in events mode
 1. Turn off socket mode in the slack api
-![Slack Socket Mode Off](docs/slack_setup_images/slack_socket_mode_off.png)
 
 2. From the slack api copy `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, and `SLACK_SIGNING_SECRET` into `local.env`
-![Slack Env Vars](docs/slack_setup_images/slack_env_vars.png)
 
 3. Create a devtunnel for port 8000 and run it
 ```
@@ -295,10 +289,8 @@ devtunnel host -a
 ```
 4. Add `SLACK_REDIRECT_URL` as the devtunnel url (port 3000) with the path `/home` to `local.env` e.g. `https://v75sl6hm.use.devtunnels.ms:3000/home`
 5. In the Slack API -> **OAuth & Permissions** add the redirect url from above as the **Redirect URL**. e.g. `https://v75sl6hm.use.devtunnels.ms:3000/home`
-![Slack Redirect Url](docs/slack_setup_images/slack_redirect_url.png)
 
 6. In the Slack API -> **Event Subscriptions** add your devtunnel url (port 8000) with path `/slack/events` as the **Request URL** (make sure it is verified and that you hit save). e.g. `https://v75sl6hm.use.devtunnels.ms:8000/slack/events`
-![Slack Request Url](docs/slack_setup_images/slack_request_url.png)
 
 7. Go to `localhost:3000` and use the install slack button in the heading (it might open a modal where you can then reinstall)
 8. When you get redirected back to the devtunnel url it may not work, just copy the query params and go to `localhost:3000/home`
