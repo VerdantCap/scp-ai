@@ -42,6 +42,7 @@ jobs:
         cd engine
         poetry env activate
         poetry install --no-root
+        chmod +x ./agents.sh
         ./agents.sh migrate
         ./agents.sh
 
@@ -50,5 +51,6 @@ jobs:
         cd dashboard
         poetry env activate
         poetry install --no-root
+        chmod +x ./dashboard.sh
         ./dashboard.sh migrate
         ./dashboard.sh
