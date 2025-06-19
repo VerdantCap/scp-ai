@@ -1,5 +1,5 @@
 # SCp-AI
-Work Diagram (https://drive.google.com/file/d/1bsnCjd4uoRHo2sXL-8ccOJEfGKTPwbi8/view?usp=sharing)
+![Work Diagram](https://drive.google.com/file/d/1bsnCjd4uoRHo2sXL-8ccOJEfGKTPwbi8/view?usp=sharing)
 
 This is the new Supercog monorepo.
 
