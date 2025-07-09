@@ -28,7 +28,7 @@ import traceback
 import math
 
 class SpeechToTextTool(ToolFactory):
-    openai_api_key:str = "sk-proj-PDI78VjJBwpk2mTDjeorT3BlbkFJVt1lST4qeAxdnriasH1y"
+    openai_api_key:str = ""
     tenant_id:str = ""
     run_id:str = ""
     
