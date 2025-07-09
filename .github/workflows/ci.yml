@@ -52,7 +52,7 @@ jobs:
         chmod +x ./agents.sh
         ./agents.sh migrate
 
-    - name: Install dependencies in engine directory
+    - name: Install dependencies in dashboard directory
       run: |
         cd dashboard
         poetry env activate
