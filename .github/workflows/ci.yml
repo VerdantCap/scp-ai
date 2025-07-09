@@ -51,7 +51,6 @@ jobs:
         poetry install --no-root
         chmod +x ./agents.sh
         ./agents.sh migrate
-        ./agents.sh
 
     - name: Install dependencies in engine directory
       run: |
@@ -60,4 +59,3 @@ jobs:
         poetry install --no-root
         chmod +x ./dashboard.sh
         ./dashboard.sh migrate
-        ./dashboard.sh
