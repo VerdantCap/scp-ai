@@ -82,9 +82,6 @@ Use this tool to manage agent schedules.
         return self.get_system_info()
     
     def prepare_creds(self, cred, secrets: dict) -> dict:
-        #self.openai_org_id  = secrets['openai_org_id'] # org-hrCSZ3sOCdQtqSJziWNEJT4h
-        #self.openai_api_key = secrets['openai_api_key']# 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
-        #print(f"--------->SMS Secrets: ",json.dumps(secrets))
         return secrets
         
     def get_running_job_stats(self) -> dict:

@@ -41,7 +41,7 @@ Use this tool to convert text to speech using OpenAI's API
     def get_tools(self) -> List[Callable]:
         self.openai_api_key=config.get_global("OPENAI_API_KEY")
         import os
-        os.environ["REPLICATE_API_TOKEN"] = "r8_IntogAytpwbunSdaup3OxKVS7kJv00W2jruYC"
+        os.environ["REPLICATE_API_TOKEN"] = ""
         return self.wrap_tool_functions([
             #self.local_generate_speech_from_text,
             self.generate_speech_file_from_text,

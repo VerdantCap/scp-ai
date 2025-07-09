@@ -7,8 +7,8 @@ app = 'sc-dashboard'
 primary_region = 'iad'
 
 [build.args]
-  GOOGLE_CLIENT_ID="654251348115-2h9baf18anioj1jilvnr2q1ijagg7l7b.apps.googleusercontent.com"
-  GOOGLE_CLIENT_SECRET="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"
+  GOOGLE_CLIENT_ID=""
+  GOOGLE_CLIENT_SECRET=""
   PORT="3000"
 
 [env]
